@@ -1,5 +1,8 @@
 
 
+class ControlFlowViolation(Exception):
+    pass
+
 class ControlFlowIntegrity:
     def __init__(self,allowed_sequence):
 
@@ -13,8 +16,10 @@ class ControlFlowIntegrity:
         expected = self.allowed_sequence[self.current_index]
 
         if action != expected:
-            raise Exception(f"Expected action {expected} but got {action}")
-        
+            raise ControlFlowViolation(
+                f"Expected action {expected} but got {action}"
+            )
+          
         self.current_index += 1
         return True
 
