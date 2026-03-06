@@ -30,3 +30,19 @@ class IntentSeal:
         logger.info(f"Intent sealed with Hash for Intent: {self.intent}")
 
         return self.intent
+
+    def verify_seal(self,intent:HashIntentContract):
+        if not intent.hash:
+            logger.error("No hash found in the intent. CANT VERIFY SEAL.You are a child")
+            return False
+        
+        new_hash = self.seal_intent(intent).hash
+
+        if new_hash == intent.hash:
+            logger.info("Intent seal verified successfully...")
+            return True
+        else:
+            logger.error("Intent seal verification failed! Hash mismatch.")
+            return False
+        
+        
