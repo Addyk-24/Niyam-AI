@@ -1,0 +1,10 @@
+agent: finance_agent
+
+allow:
+  - proceed_transaction
+
+deny:
+  - send_email
+
+flow:
+  - proceed_transaction -> end
