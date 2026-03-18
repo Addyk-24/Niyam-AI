@@ -15,7 +15,15 @@ class IntentContract(BaseModel):
 
 
     def intent_hash(self):
-        normalized = json.dumps(self.dict(), sort_keys=True)
+        """Deterministic hash of the full contract dict."""
+
+        try:
+            data = self.model_dump()
+        except AttributeError:
+            data = self.dict()
+
+        normalized = json.dumps(data, sort_keys=True)
+
         return hashlib.sha256(normalized.encode()).hexdigest()
 
     def seal(self) -> str:
@@ -24,9 +32,9 @@ class IntentContract(BaseModel):
         
         """
         content = (
-            self.user_task +
-            ''.join(sorted(self.allowed_tool)) +
-            ''.join(sorted(self.forbidden_tool))
+            self.user_task
+            + ''.join(sorted(self.allowed_tools))
+            + ''.join(sorted(self.forbidden_tools))
         )
 
         return hashlib.sha256(content.encode()).hexdigest()

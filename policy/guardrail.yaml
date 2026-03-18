@@ -5,6 +5,9 @@ allow:
 
 deny:
   - send_email
+  - delete_record
+  - shell_exec
 
 flow:
-  - proceed_transaction -> end
+  - proceed_transaction
+  - end
