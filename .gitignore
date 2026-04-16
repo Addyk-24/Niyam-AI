@@ -3,6 +3,8 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+benchmark_eval
+comaprison.txt
 # C extensions
 *.so
 
