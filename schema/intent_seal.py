@@ -2,43 +2,53 @@ import logging
 from typing import List
 from pydantic import BaseModel
 import hashlib
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class HashIntentContract(BaseModel):
-    hash: str
+    hash: str = ""
     agent_name: str
     user_task: str
     allowed_tools: List[str]
     forbidden_tools: List[str]
 
+    def _compute_hash(self) -> str:
+        try:
+            data = self.model_dump(exclude={"hash"})
+        except AttributeError:
+            data = self.dict(exclude={"hash"})
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
 class IntentSeal:
     def __init__(self):
-        self.intent = None
-        self.isSealed = False
+        self.intent: HashIntentContract | None = None
+        self.is_sealed: bool = False
 
-    def seal_intent(self,intent:HashIntentContract):
-        if self.isSealed:
+    def seal_intent(self,intent:HashIntentContract) -> HashIntentContract:
+        if self.is_sealed:
             logger.warning("Intent is already Sealed. No need to Seal again")
+            return self.intent
 
-        contract_hash = hashlib.sha256(intent.json().encode()).hexdigest()
-        intent.hash = contract_hash
+        intent.hash = intent._compute_hash()
         self.intent = intent
-        self.isSealed = True
-        
-        logger.info(f"Intent sealed with Hash for Intent: {self.intent}")
+        self.is_sealed = True
 
+        logger.info(f"Intent sealed | agent={intent.agent_name} | hash={intent.hash[:16]}...")
         return self.intent
 
-    def verify_seal(self,intent:HashIntentContract):
+    def verify_seal(self,intent:HashIntentContract) -> bool:
+
         if not intent.hash:
             logger.error("No hash found in the intent. CANT VERIFY SEAL.You are a child")
             return False
         
-        new_hash = self.seal_intent(intent).hash
+        expected = intent._compute_hash()
 
-        if new_hash == intent.hash:
+
+        if expected == intent.hash:
             logger.info("Intent seal verified successfully...")
             return True
         else:
