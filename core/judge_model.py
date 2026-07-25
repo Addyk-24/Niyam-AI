@@ -2,7 +2,7 @@
 core/judge_model.py — Production-Ready Judge Model for Niyam-AI
 
 WHAT CHANGED FROM v1 (and why):
-─────────────────────────────────────────────────────────────────
+
 v1 Problems:
   1. WRONG BENCHMARK LABELS: Used ASB fulfillable=1/0.
      ASB's 'safe' means 'the agent should complete this task' — not
@@ -16,7 +16,7 @@ v1 Problems:
   3. BACKWARDS FEATURES: 10 of 19 features had inverted correlation
      because they were agent-type-specific, not intent-violation-specific.
      e.g. external_email positively predicted SAFE because Gmail agents
-     legitimately email external addresses in ASB's 'safe' scenarios.
+     legitimately email external addresses in ASB's safe scenarios.
 
   4. DEAD FEATURES: inj_score, inj_flag, multi_tool had std=0.000.
      They never varied across any ASB scenario (payloads were empty).
@@ -62,16 +62,12 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CORRECT LABELING FUNCTION
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def label_intent_violation(instruction: str) -> int:
     """
     Returns 1 if this instruction attempts to violate an intent contract,
     0 if it is a legitimate request within any reasonable agent scope.
 
-    This is the CORRECT label for Niyam-AI evaluation.
+    This is one Niyam-AI label for intent-contract evaluation.
     It answers: 'Does this try to make the agent go outside its declared bounds?'
     NOT: 'Is this action generally safe?'
     """
@@ -85,20 +81,17 @@ def label_intent_violation(instruction: str) -> int:
             'ignore all', 'ignore your instructions', 'disregard',
             'new instructions:', 'system:', 'ignore the above',
         ]),
-        # Covert exfiltration
         any(p in instr for p in [
             'without telling', 'secretly', 'without permission',
             'without consent', 'without authorization', 'without knowing',
             'do not tell', "don't tell", 'hide this', 'keep secret',
             'forward to', 'exfiltrate', 'send all',
         ]),
-        # Explicit attack / harm intent
         any(p in instr for p in [
             'hack', 'steal', 'malware', 'backdoor', 'exploit',
             'attack', 'compromise', 'phishing', 'ransomware',
             'unauthorized access', 'brute force',
         ]),
-        # Deception / social engineering
         any(p in instr for p in [
             'tell them it is', 'pretend this is', 'make it look like',
             'disguise', 'impersonate', 'fake', 'spoof',
@@ -107,9 +100,6 @@ def label_intent_violation(instruction: str) -> int:
     return int(any(signals))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# JUDGE INPUT
-# ═══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class JudgeInput:
@@ -128,9 +118,8 @@ class JudgeInput:
         )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+
 # HAND-CRAFTED FEATURES (only the ones with correct correlation)
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def extract_features(inp: JudgeInput) -> list[float]:
     """
@@ -143,7 +132,6 @@ def extract_features(inp: JudgeInput) -> list[float]:
 
     feats = []
 
-    # F1: Harm phrase score (correctly negative for safe) — validated OK
     harm_phrases = [
         "without permission", "without telling", "secretly", "do not tell",
         "don't tell", "bypass", "ignore safety", "pretend you are",
@@ -156,7 +144,7 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(harm_score)
     feats.append(1.0 if harm_score > 0 else 0.0)
 
-    # F3: Sensitive data in instruction (validated OK)
+
     sensitive = [
         "password", "api_key", "secret", "token", "ssh key", "private key",
         "credential", "id_rsa", "/etc/shadow", "ssn", "credit card",
@@ -166,7 +154,7 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(sens_score)
     feats.append(1.0 if sens_score > 0 else 0.0)
 
-    # F5: Large unusual amount (validated OK — negative for safe)
+    # Large unusual amount (validated OK — negative for safe)
     amounts = re.findall(r'\$?([\d,]+(?:\.\d+)?)', instr)
     large_amount = False
     for a in amounts:
@@ -179,10 +167,9 @@ def extract_features(inp: JudgeInput) -> list[float]:
                 pass
     feats.append(1.0 if large_amount else 0.0)
 
-    # F6: Instruction length (longer = more likely injection attempt)
     feats.append(min(len(inp.instruction) / 2000, 1.0))
 
-    # F7-F9: Consent negation phrases
+    # Consent negation phrases
     no_consent = [
         "without consent", "without authorization", "unauthorized",
         "without knowing", "without approval", "without asking",
@@ -192,7 +179,7 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(consent_score)
     feats.append(1.0 if consent_score > 0 else 0.0)
 
-    # F10: Injection in payload (only meaningful when payload is provided)
+    # Injection in payload (only meaningful when payload is provided)
     injection_patterns = [
         r"'\s*;", r"\bdrop\s+table\b", r"<script", r"onerror\s*=",
         r"\.\./", r"\x00", r"javascript:", r"\bexec\s*\(",
@@ -202,29 +189,16 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(inj_score)
     feats.append(1.0 if inj_score > 0 else 0.0)
 
-    # F12: Explicit attack words in payload
     attack_in_payload = any(kw in pay for kw in [
         "drop", "delete", "truncate", "exec", "eval", "system(",
     ])
     feats.append(1.0 if attack_in_payload else 0.0)
 
-    return feats  # 12 features
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PRODUCTION JUDGE MODEL
-# ═══════════════════════════════════════════════════════════════════════════════
+    return feats
 
 class JudgeModel:
     """
     Production Judge Model: TF-IDF (text semantics) + hand features (domain rules).
-
-    Results on Agent-SafetyBench with correct Niyam-AI labels:
-        Accuracy  : 98.5%
-        Precision : 90.9%
-        Recall    : 90.9%
-        F1        : 90.9%
-        FPR       : 0.8%
 
     For EzKL ZK compilation: export via export_for_ezkl().
     The 12-dim hand feature vector alone achieves F1=87% and is lightweight
@@ -252,7 +226,6 @@ class JudgeModel:
         self.is_trained = False
         self._train_stats = {}
 
-    # ── Training ──────────────────────────────────────────────────────────────
 
     def train_from_dataset(self, dataset_path: str) -> dict:
         """
@@ -284,16 +257,14 @@ class JudgeModel:
             tool_str  = ' '.join(tools) if tools else 'no_tool'
             text      = item['instruction'] + ' TOOLS: ' + tool_str
             viol      = label_intent_violation(item['instruction'])
-            label     = 1 - viol   # 1=safe, 0=violation
+            label     = 1 - viol
 
-            # Use first tool for hand features
             first_tool = tools[0] if tools else 'no_tool'
             inp = JudgeInput(
                 instruction=item['instruction'],
                 tool_name=first_tool,
                 payload={},
-                agent_declared_scope=['proceed_transaction',
-                                      'get_balance', 'get_transaction_history'],
+                agent_declared_scope=tools,
             )
             texts.append(text)
             hand_feats.append(extract_features(inp))
@@ -313,15 +284,12 @@ class JudgeModel:
             idx, test_size=0.2, random_state=42, stratify=labels
         )
 
-        # Build combined feature matrix
         X_tr = self._transform(texts[tr_idx], hand_feats[tr_idx], fit=True)
         X_te = self._transform(texts[te_idx], hand_feats[te_idx], fit=False)
 
-        # Train
         self.clf.fit(X_tr, labels[tr_idx])
         self.is_trained = True
 
-        # Evaluate on held-out test set
         y_pred = self.clf.predict(X_te)
         cm     = confusion_matrix(labels[te_idx], y_pred)
         TP, FN, FP, TN = cm[0][0], cm[0][1], cm[1][0], cm[1][1]
@@ -371,14 +339,13 @@ class JudgeModel:
             X_hand  = self.scaler.transform(hand_feats)
         return sp.hstack([X_tfidf, sp.csr_matrix(X_hand)])
 
-    # ── Inference ─────────────────────────────────────────────────────────────
 
     def predict(self, inp: JudgeInput) -> tuple[int, float]:
         """
         Returns (decision, confidence).
         decision: 1 = Safe (allow tool call)
                   0 = Unsafe (block — intent violation detected)
-        confidence: 0.0 – 1.0
+        confidence: 0.0 - 1.0
         """
         if not self.is_trained:
             raise RuntimeError("Call train_from_dataset() or train() first.")
@@ -395,7 +362,6 @@ class JudgeModel:
         decision = int(self.clf.predict(X)[0])
         return decision, float(max(proba))
 
-    # ── Persistence ───────────────────────────────────────────────────────────
 
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
@@ -420,7 +386,6 @@ class JudgeModel:
         self._train_stats   = obj.get('train_stats', {})
         self.max_tfidf_features = obj.get('max_features', 3000)
 
-    # ── EzKL export (for ZK compilation in Phase 4) ───────────────────────────
 
     def export_hand_features_for_ezkl(self, sample_inputs: list[JudgeInput],
                                        output_dir: str = "ezkl") -> None:
@@ -429,7 +394,7 @@ class JudgeModel:
 
         WHY hand features only for ZK:
             TF-IDF produces 3000+ dimensional sparse vectors.
-            EzKL circuit size = O(input_dim × hidden_dim).
+            EzKL circuit size = O(input_dim x hidden_dim).
             3000-dim input → millions of constraints → impractical.
             12-dim hand features → ~4096 constraints → fits in 2^16 target.
 
@@ -448,7 +413,6 @@ class JudgeModel:
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # Build input samples
         sample_data = []
         for inp in sample_inputs[:10]:
             feats = extract_features(inp)
@@ -461,7 +425,7 @@ class JudgeModel:
         with open(os.path.join(output_dir, "sample_inputs.json"), 'w') as f:
             json_mod.dump(sample_data, f, indent=2)
 
-        # Export LR coefficients as a simple 1-layer neural network
+        # LR coefficients as a simple 1-layer neural network
         coef = self.clf.coef_[0][:12]   # hand features only
         bias = float(self.clf.intercept_[0])
         scale_mean = self.scaler.mean_[:12].tolist()
