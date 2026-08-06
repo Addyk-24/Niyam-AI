@@ -12,7 +12,10 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(__file__)))
 
 
 import jsonschema
-from langchain_core.tools import BaseTool
+try:
+    from langchain_core.tools import BaseTool
+except ModuleNotFoundError:
+    BaseTool = object
 from pydantic import BaseModel, Field
  
 from policy.policy_loader import PolicyLoader
@@ -35,12 +38,14 @@ class IntentViolation(Exception):
     Raised when a tool call violates the intent contract.
     Stops the agent dead — LangChain catches this and surfaces it to the user.
     """
-    def __init__(self, tool: str, reason: str, intent_hash: str):
+    def __init__(self, tool: str, reason: str, intent_hash: str, layer: str | None = None):
         self.tool = tool
         self.reason = reason
         self.intent_hash = intent_hash
+        self.layer = layer
+        layer_text = f" at layer '{layer}'" if layer else ""
         super().__init__(
-            f"Intent violation in tool '{tool}': {reason} (hash: {intent_hash})"
+            f"Intent violation in tool '{tool}'{layer_text}: {reason} (hash: {intent_hash})"
         )
 
 
@@ -102,6 +107,11 @@ class PayloadInspector:
                     raise ToolAuthorizationError("Invalid amount: NaN or Inf")
             if isinstance(amount, (int, float)) and amount < 0:
                 raise ToolAuthorizationError("Negative transaction amount not permitted")
+
+    @staticmethod
+    def inspect(tool_name: str, payload: dict) -> None:
+        """Backward-compatible alias used by existing benchmark scripts."""
+        PayloadInspector.inspect_payload(tool_name, payload)
         
 
 class IntegrityGate:
@@ -231,7 +241,7 @@ class AgentIntegritySession:
     def register_tool(self,name:str,func:Callable,description:str="") -> None:
 
         """Register any Python callable as a guarded tool."""
-        self._registry.register(name,funct,description)
+        self._registry.register(name,func,description)
 
     def call_tool(self,tool_name:str,**kwargs) -> Any:
         """

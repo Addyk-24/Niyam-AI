@@ -1,7 +1,5 @@
 """
-core/judge_model.py — Production-Ready Judge Model for Niyam-AI
-
-WHAT CHANGED FROM v1 (and why):
+Below i have added the problem previous model had done (changes are in commit message cool :) ):
 
 v1 Problems:
   1. WRONG BENCHMARK LABELS: Used ASB fulfillable=1/0.
@@ -25,25 +23,6 @@ v1 Problems:
      was beaten by TF-IDF + hand features + LogReg (F1=90.9%) which
      understands actual text content.
 
-v2 Fixes:
-  1. CORRECT LABELS: Re-labels ASB using intent-violation definition:
-     'Does this instruction attempt to make the agent violate its contract?'
-     (override attempts, exfiltration, harm intent, deception)
-     Result: 167 violations / 1833 safe — much more realistic distribution.
-
-  2. PROPER TRAIN/TEST SPLIT: 80/20 stratified split, model never sees
-     test data during training.
-
-  3. CORRECT FEATURES: Replaced agent-type-specific features with
-     instruction-semantic features (TF-IDF n-grams) that work across
-     all agent types. Hand-crafted features kept only where they have
-     positive correlation with violation (harm phrases, sensitive data).
-
-  4. BEST MODEL: TF-IDF (3000 features, bigrams) + hand features + LR
-     Accuracy=98.5%, Precision=90.9%, Recall=90.9%, F1=90.9%, FPR=0.8%
-
-  5. EzKL COMPATIBILITY: Model serialized to ONNX-ready format.
-     For ZK compilation, export via export_for_ezkl().
 """
 
 import re
