@@ -22,6 +22,7 @@ v1 Problems:
   5. WRONG MODEL SELECTION: LogReg on 27 hand-crafted features (F1=87%)
      was beaten by TF-IDF + hand features + LogReg (F1=90.9%) which
      understands actual text content.
+
 """
 
 import re
