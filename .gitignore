@@ -8,6 +8,14 @@ comaprison.txt
 # C extensions
 *.so
 
+ezkl_pipeline/artifacts/*
+
+!ezkl_pipeline/artifacts/proof.json
+!ezkl_pipeline/artifacts/ezkl_real_results.json
+
+
+data/agent_safetybench/
+
 # Distribution / packaging
 .Python
 build/
