@@ -1,0 +1,47 @@
+{
+  "results": [
+    {
+      "baseline": "NeMo Guardrails",
+      "contingency_table": {
+        "a_both_correct": 1570,
+        "b_niyam_wins": 387,
+        "c_baseline_wins": 20,
+        "d_both_wrong": 23,
+        "n_compared": 2000
+      },
+      "mcnemar_p_value": 0.0,
+      "significant_at_0.05": true,
+      "significant_at_0.01": true,
+      "discordant_win_ratio_niyam_vs_baseline": 19.35
+    },
+    {
+      "baseline": "Llama Prompt Guard 2",
+      "contingency_table": {
+        "a_both_correct": 1845,
+        "b_niyam_wins": 112,
+        "c_baseline_wins": 13,
+        "d_both_wrong": 30,
+        "n_compared": 2000
+      },
+      "mcnemar_p_value": 0.0,
+      "significant_at_0.05": true,
+      "significant_at_0.01": true,
+      "discordant_win_ratio_niyam_vs_baseline": 8.62
+    },
+    {
+      "baseline": "GPT-OSS-Safeguard-20B",
+      "contingency_table": {
+        "a_both_correct": 1576,
+        "b_niyam_wins": 381,
+        "c_baseline_wins": 19,
+        "d_both_wrong": 24,
+        "n_compared": 2000
+      },
+      "mcnemar_p_value": 0.0,
+      "significant_at_0.05": true,
+      "significant_at_0.01": true,
+      "discordant_win_ratio_niyam_vs_baseline": 20.05
+    }
+  ],
+  "markdown": "| Baseline | b (Niyam-AI wins) | c (Baseline wins) | McNemar p-value | Significant (p<0.05) |\n|---|---|---|---|---|\n| NeMo Guardrails | 387 | 20 | 0.00e+00 | Yes |\n| Llama Prompt Guard 2 | 112 | 13 | 0.00e+00 | Yes |\n| GPT-OSS-Safeguard-20B | 381 | 19 | 0.00e+00 | Yes |"
+}
