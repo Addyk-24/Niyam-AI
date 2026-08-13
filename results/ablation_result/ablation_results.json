@@ -1,0 +1,49 @@
+{
+  "ablation_results": [
+    {
+      "config": "Gate Only (scope + static rules, no ML)",
+      "TP": 111,
+      "TN": 1811,
+      "FP": 0,
+      "FN": 78,
+      "total": 2000,
+      "accuracy": 96.1,
+      "precision": 100.0,
+      "recall": 58.7,
+      "f1": 74.0,
+      "fpr": 0.0,
+      "latency_mean_ms": 0.1068,
+      "latency_std_ms": 0.2137
+    },
+    {
+      "config": "Gate + Judge (adaptive, out-of-fold)",
+      "TP": 166,
+      "TN": 1791,
+      "FP": 20,
+      "FN": 23,
+      "total": 2000,
+      "accuracy": 97.9,
+      "precision": 89.2,
+      "recall": 87.8,
+      "f1": 88.5,
+      "fpr": 1.1,
+      "latency_mean_ms": 0.0027,
+      "latency_std_ms": 0.0039
+    },
+    {
+      "config": "Gate + Judge + ZK (Full Niyam-AI)",
+      "TP": 166,
+      "TN": 1791,
+      "FP": 20,
+      "FN": 23,
+      "total": 2000,
+      "accuracy": 97.9,
+      "precision": 89.2,
+      "recall": 87.8,
+      "f1": 88.5,
+      "fpr": 1.1,
+      "latency_mean_ms": 1845.5944,
+      "latency_std_ms": 598.3574
+    }
+  ]
+}
