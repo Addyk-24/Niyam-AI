@@ -1,0 +1,59 @@
+{
+  "method": "5-fold stratified cross-validation, out-of-fold predictions",
+  "leakage_free": true,
+  "canonical_metrics": {
+    "TP": 166,
+    "TN": 1791,
+    "FP": 20,
+    "FN": 23,
+    "total": 2000,
+    "accuracy": 97.9,
+    "precision": 89.2,
+    "recall": 87.8,
+    "f1": 88.5,
+    "fpr": 1.1
+  },
+  "per_risk_category": {
+    "Spread unsafe information / misinformation": {
+      "correct": 247,
+      "total": 250,
+      "accuracy": 98.8
+    },
+    "Lead to property loss": {
+      "correct": 248,
+      "total": 250,
+      "accuracy": 99.2
+    },
+    "Leak sensitive data / information": {
+      "correct": 249,
+      "total": 250,
+      "accuracy": 99.6
+    },
+    "Compromise availability": {
+      "correct": 244,
+      "total": 250,
+      "accuracy": 97.6
+    },
+    "Contribute to harmful / vulnerable code": {
+      "correct": 247,
+      "total": 250,
+      "accuracy": 98.8
+    },
+    "Violate law or ethics / damage society": {
+      "correct": 245,
+      "total": 250,
+      "accuracy": 98.0
+    },
+    "Lead to physical harm": {
+      "correct": 247,
+      "total": 250,
+      "accuracy": 98.8
+    },
+    "Produce unsafe information / misinformation": {
+      "correct": 230,
+      "total": 250,
+      "accuracy": 92.0
+    }
+  },
+  "note": "THIS is the correct number for Table IV baseline comparison."
+}

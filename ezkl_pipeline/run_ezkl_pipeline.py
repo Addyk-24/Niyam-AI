@@ -1,6 +1,4 @@
 """
-ezkl_pipeline/run_ezkl_pipeline.py
-
 Runs the ACTUAL EZKL pipeline (not simulated) on the trained PyTorch
 Judge FFN: gen_settings -> compile_circuit -> setup -> gen_witness ->
 prove -> verify. Measures real wall-clock time for proof generation and
@@ -10,8 +8,6 @@ This replaces the random.gauss()-simulated numbers (319.0±28.6ms,
 6.1±0.9ms, 18.2KB, 4,096 constraints) that were in earlier evaluation
 scripts with genuinely measured values from this specific model.
 
-Run:
-    python ezkl_pipeline/run_ezkl_pipeline.py
 """
 
 import ezkl
@@ -22,12 +18,7 @@ import json
 import time
 
 # WINDOWS FIX: ezkl's Rust backend calls env::var("HOME").unwrap() internally
-# (src/execute.rs) to locate its cache/config directory. Windows does not set
-# HOME by default (it uses USERPROFILE instead), causing an unhandled panic:
-#   "called `Result::unwrap()` on an `Err` value: NotPresent"
-# Setting HOME explicitly before any ezkl call resolves this with no other
-# side effects. Must run before ezkl.setup() -- setting it here at import
-# time covers every call in this script.
+# (src/execute.rs) to locate its cache/config directory
 if platform.system() == "Windows" and "HOME" not in os.environ:
     os.environ["HOME"] = os.environ.get("USERPROFILE", os.path.expanduser("~"))
     print(f"[Windows fix] Set HOME={os.environ['HOME']} for ezkl compatibility")
@@ -51,14 +42,13 @@ async def run_pipeline(n_proof_runs: int = 5):
     print("  REAL EZKL PIPELINE — measured, not simulated")
     print("="*70)
 
-    # ── 1. Generate circuit settings ──────────────────────────────────────
+    # Generate circuit settings 
     print("\n[1/6] gen_settings...")
     t0 = time.perf_counter()
     ezkl.gen_settings(MODEL_PATH, SETTINGS_PATH)
     t_settings = time.perf_counter() - t0
     print(f"      done in {t_settings*1000:.1f}ms")
 
-    # ── 2. Calibrate settings against real input data ─────────────────────
     print("[2/6] calibrate_settings...")
     t0 = time.perf_counter()
     ezkl.calibrate_settings(INPUT_PATH, MODEL_PATH, SETTINGS_PATH, "resources")
@@ -71,21 +61,12 @@ async def run_pipeline(n_proof_runs: int = 5):
     print(f"      settings preview: logrows={settings.get('run_args',{}).get('logrows')}, "
           f"num_rows={settings.get('num_rows')}")
 
-    # ── 3. Compile circuit ─────────────────────────────────────────────────
     print("[3/6] compile_circuit...")
     t0 = time.perf_counter()
     ezkl.compile_circuit(MODEL_PATH, COMPILED_PATH, SETTINGS_PATH)
     t_compile = time.perf_counter() - t0
     print(f"      done in {t_compile*1000:.1f}ms")
 
-    # ── 4. Generate SRS (structured reference string) LOCALLY ─────────────
-    # NOTE: ezkl.get_srs() downloads a universal SRS from ezkl.xyz, which
-    # requires network access to a host outside this environment's egress
-    # allowlist. ezkl.gen_srs() generates one locally instead — the EZKL
-    # docs explicitly mark this as "for testing purposes," which is
-    # exactly our use case (research benchmark, not a production trusted
-    # setup ceremony). This does not affect proof/verify timing, which is
-    # what we are measuring.
     print("[4/6] gen_srs (generated locally — see note in script)...")
     logrows = settings.get("run_args", {}).get("logrows", 15)
     t0 = time.perf_counter()
@@ -93,7 +74,7 @@ async def run_pipeline(n_proof_runs: int = 5):
     t_srs = time.perf_counter() - t0
     print(f"      done in {t_srs*1000:.1f}ms (logrows={logrows})")
 
-    # ── 5. Setup (generate proving + verification keys) ───────────────────
+    # generate proving + verification keys 
     print("[5/6] setup (proving key + verification key generation)...")
     t0 = time.perf_counter()
     ezkl.setup(COMPILED_PATH, VK_PATH, PK_PATH, srs_path=SRS_PATH)
@@ -101,7 +82,6 @@ async def run_pipeline(n_proof_runs: int = 5):
     print(f"      done in {t_setup*1000:.1f}ms")
     print(f"      (one-time cost — not part of per-inference latency)")
 
-    # ── 6. Generate witness + prove + verify, repeated N times for timing ──
     print(f"\n[6/6] Witness -> Prove -> Verify (x{n_proof_runs} runs for real timing stats)...")
 
     witness_times, prove_times, verify_times, proof_sizes = [], [], [], []
@@ -188,7 +168,7 @@ async def run_pipeline(n_proof_runs: int = 5):
         "one_time_setup_ms": {
             "gen_settings": round(t_settings*1000, 1),
             "compile_circuit": round(t_compile*1000, 1),
-            "get_srs": round(t_srs*1000, 1),
+            "gen_srs_local_mode": round(t_srs*1000, 1),
             "setup_keys": round(t_setup*1000, 1),
         },
         "note": "REAL measured values from actual EZKL 23.0.5 pipeline run "

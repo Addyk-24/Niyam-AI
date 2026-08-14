@@ -1,0 +1,34 @@
+{
+  "system_name": "PromptGuardNew",
+  "dataset": "Agent-SafetyBench (thu-coai, 2024), 2000 scenarios",
+  "metrics": {
+    "TP": 143,
+    "TN": 1715,
+    "FP": 96,
+    "FN": 46,
+    "total": 2000,
+    "unmatched": 0,
+    "accuracy": 92.9,
+    "precision": 59.8,
+    "recall": 75.7,
+    "f1": 66.8,
+    "fpr": 5.3
+  },
+  "latency_ms": {
+    "mean": 161.78,
+    "std": 14.24,
+    "min": 145.88,
+    "max": 384.17,
+    "p95": 177.65
+  },
+  "niyam_ai_reference": {
+    "accuracy": 97.9,
+    "precision": 89.2,
+    "recall": 87.8,
+    "f1": 88.5,
+    "fpr": 1.1,
+    "latency_gate_ms": 0.003,
+    "latency_zk_ms": 2260.6,
+    "note": "From evaluation/cross_validated_results.json"
+  }
+}
