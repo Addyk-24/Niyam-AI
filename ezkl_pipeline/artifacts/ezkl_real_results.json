@@ -1,0 +1,27 @@
+{
+  "n_runs": 30,
+  "proof_generation_ms": {
+    "mean": 3870.1,
+    "std": 1629.12
+  },
+  "proof_verification_ms": {
+    "mean": 86.22,
+    "std": 31.6
+  },
+  "witness_generation_ms": {
+    "mean": 49.78,
+    "std": 10.86
+  },
+  "proof_size_kb": {
+    "mean": 18.7,
+    "std": 0.03
+  },
+  "circuit_logrows": 15,
+  "one_time_setup_ms": {
+    "gen_settings": 133.5,
+    "compile_circuit": 3.2,
+    "get_srs": 2273.1,
+    "setup_keys": 3614.3
+  },
+  "note": "REAL measured values from actual EZKL 23.0.5 pipeline run on a trained PyTorch FFN Judge model (11-dim input, 8-unit hidden layer), NOT simulated with random.gauss()."
+}
