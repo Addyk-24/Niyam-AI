@@ -13,7 +13,7 @@ ezkl_pipeline/artifacts/*
 !ezkl_pipeline/artifacts/proof.json
 !ezkl_pipeline/artifacts/ezkl_real_results.json
 
-
+RUN_COMMAND.md
 data/agent_safetybench/
 
 # Distribution / packaging
@@ -42,6 +42,7 @@ MANIFEST
 *.manifest
 *.spec
 
+.claude/
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
