@@ -1,27 +1,81 @@
 {
   "n_runs": 30,
   "proof_generation_ms": {
-    "mean": 3870.1,
-    "std": 1629.12
+    "mean": 1966.67,
+    "std": 98.18
   },
+  "proof_generation_distribution": {
+    "mean": 1966.67,
+    "std": 98.18,
+    "min": 1757.2,
+    "p25": 1873.05,
+    "median": 1990.78,
+    "p75": 2017.51,
+    "p95": 2122.77,
+    "max": 2172.93,
+    "first_5_mean": 1813.13
+  },
+  "proof_verification_distribution": {
+    "mean": 69.33,
+    "std": 9.63,
+    "min": 50.51,
+    "p25": 60.69,
+    "median": 70.2,
+    "p75": 75.92,
+    "p95": 85.47,
+    "max": 90.59,
+    "first_5_mean": 55.39
+  },
+  "raw_prove_times_ms": [
+    1757.2,
+    1859.37,
+    1952.32,
+    1970.86,
+    1914.07,
+    1855.27,
+    1839.74,
+    1853.83,
+    1810.0,
+    1857.27,
+    1950.95,
+    1804.86,
+    1979.02,
+    2058.17,
+    2020.39,
+    2045.72,
+    2006.29,
+    2007.57,
+    2018.55,
+    2023.03,
+    1996.35,
+    2004.15,
+    2014.14,
+    1985.21,
+    1977.35,
+    2007.14,
+    2130.36,
+    2113.5,
+    2172.93,
+    2014.41
+  ],
   "proof_verification_ms": {
-    "mean": 86.22,
-    "std": 31.6
+    "mean": 69.33,
+    "std": 9.63
   },
   "witness_generation_ms": {
-    "mean": 49.78,
-    "std": 10.86
+    "mean": 59.24,
+    "std": 12.77
   },
   "proof_size_kb": {
-    "mean": 18.7,
-    "std": 0.03
+    "mean": 18.68,
+    "std": 0.02
   },
   "circuit_logrows": 15,
   "one_time_setup_ms": {
-    "gen_settings": 133.5,
-    "compile_circuit": 3.2,
-    "get_srs": 2273.1,
-    "setup_keys": 3614.3
+    "gen_settings": 35.8,
+    "compile_circuit": 3.1,
+    "gen_srs_local_mode": 2015.4,
+    "setup_keys": 1507.7
   },
   "note": "REAL measured values from actual EZKL 23.0.5 pipeline run on a trained PyTorch FFN Judge model (11-dim input, 8-unit hidden layer), NOT simulated with random.gauss()."
 }

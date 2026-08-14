@@ -1,0 +1,34 @@
+{
+  "system_name": "NemoGuardNew",
+  "dataset": "Agent-SafetyBench (thu-coai, 2024), 2000 scenarios",
+  "metrics": {
+    "TP": 139,
+    "TN": 1451,
+    "FP": 360,
+    "FN": 50,
+    "total": 2000,
+    "unmatched": 0,
+    "accuracy": 79.5,
+    "precision": 27.9,
+    "recall": 73.5,
+    "f1": 40.4,
+    "fpr": 19.9
+  },
+  "latency_ms": {
+    "mean": 1324.84,
+    "std": 5497.19,
+    "min": 109.62,
+    "max": 52302.02,
+    "p95": 2301.79
+  },
+  "niyam_ai_reference": {
+    "accuracy": 97.9,
+    "precision": 89.2,
+    "recall": 87.8,
+    "f1": 88.5,
+    "fpr": 1.1,
+    "latency_gate_ms": 0.003,
+    "latency_zk_ms": 2260.6,
+    "note": "From evaluation/cross_validated_results.json"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "system_name": "GPTOSStGuardNew",
+  "dataset": "Agent-SafetyBench (thu-coai, 2024), 2000 scenarios",
+  "metrics": {
+    "TP": 174,
+    "TN": 1421,
+    "FP": 390,
+    "FN": 15,
+    "total": 2000,
+    "unmatched": 0,
+    "accuracy": 79.8,
+    "precision": 30.9,
+    "recall": 92.1,
+    "f1": 46.2,
+    "fpr": 21.5
+  },
+  "latency_ms": {
+    "mean": 279.46,
+    "std": 214.91,
+    "min": 127.15,
+    "max": 6118.21,
+    "p95": 470.99
+  },
+  "niyam_ai_reference": {
+    "accuracy": 97.9,
+    "precision": 89.2,
+    "recall": 87.8,
+    "f1": 88.5,
+    "fpr": 1.1,
+    "latency_gate_ms": 0.003,
+    "latency_zk_ms": 2260.6,
+    "note": "From evaluation/cross_validated_results.json"
+  }
+}
