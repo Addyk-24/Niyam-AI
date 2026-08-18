@@ -15,16 +15,16 @@ presence of a verifiable artifact. This is the correct and expected result
 — the ablation's job is to show this explicitly rather than let a reviewer
 wonder whether ZK is "just adding latency for nothing."
 
-Run:
-    python evaluation/ablation_study.py --dataset released_data.json
 """
 
 import sys, os, json, time, argparse, random
+import re as _re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.judge_model import JudgeModel, JudgeInput, label_intent_violation
+from core.judge_model import JudgeInput, label_intent_violation
 from schema.tool_gate import ToolAuthorityGate, ToolAuthorizationError
 from schema.intent_contract import IntentContract
+from evaluation.cross_validated_eval import get_oof_predictions
 
 # ADAPTIVE CONTRACT MODE
 # A fixed "finance_agent" allowlist causes catastrophic false positives on
@@ -55,7 +55,6 @@ def build_adaptive_gate(tools_in_scenario: list) -> ToolAuthorityGate:
 #  Configuration A: Gate only 
 
 # Real, non-tautological rule-based heuristics for the Gate-Only baseline.
-import re as _re
 _HARM_PATTERNS = [
     _re.compile(r"ignore\s+(previous|prior|all)\s+instructions", _re.I),
     _re.compile(r"\bjailbreak\b", _re.I),
@@ -123,6 +122,7 @@ def eval_gate_only(data: list) -> dict:
         else:                                       FN+=1
 
     return _metrics("Gate Only (scope + static rules, no ML)", TP, TN, FP, FN, latencies)
+
 
 
 #  Configuration B: Gate + Judge :;
@@ -284,7 +284,6 @@ def run_ablation(dataset_path: str, n_folds: int = 5):
     predictions via cross_validated_eval.get_oof_predictions() ONCE, and
     reuses them across Config B and C.
     """
-    from evaluation.cross_validated_eval import get_oof_predictions
 
     with open(dataset_path, encoding="utf-8") as f:
         data = json.load(f)

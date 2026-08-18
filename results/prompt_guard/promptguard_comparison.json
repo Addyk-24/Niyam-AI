@@ -1,5 +1,5 @@
 {
-  "system_name": "PromptGuardNew",
+  "system_name": "Llama Prompt Guard 2",
   "dataset": "Agent-SafetyBench (thu-coai, 2024), 2000 scenarios",
   "metrics": {
     "TP": 143,
@@ -23,10 +23,10 @@
   },
   "niyam_ai_reference": {
     "accuracy": 97.9,
-    "precision": 89.2,
+    "precision": 89.7,
     "recall": 87.8,
-    "f1": 88.5,
-    "fpr": 1.1,
+    "f1": 88.8,
+    "fpr": 1.0,
     "latency_gate_ms": 0.003,
     "latency_zk_ms": 2260.6,
     "note": "From evaluation/cross_validated_results.json"

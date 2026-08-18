@@ -1,54 +1,50 @@
 """
+Niyam-AI: makes the safety decision at runtime, the model, One model, three roles.
 
-Trains a small PyTorch feedforward network used SOLELY to demonstrate
-that Niyam-AI's Judge model architecture compiles into a working EZKL
-zk-SNARK circuit and to measure real proof generation/verification
-timing
 
-WHY THIS DOES NOT TRAIN ON AGENT-SAFETYBENCH (important methodological
-point, addresses a real fairness concern):
+A 3,011-dimensional TF-IDF pipeline does not compile to a
+practical circuit at this size; the 11-dimensional hand-feature
+representation does, which is why the feature-based model is the one kept.
 
-  Proof generation TIME is a function of the CIRCUIT'S STRUCTURE --
-  input dimensionality, hidden layer width, number of arithmetic
-  constraints (logrows) -- not of what dataset trained the weights, and
-  not of how accurate the model is. A circuit with 11 inputs -> 8
-  hidden units -> 2 outputs takes the same time to prove regardless of
-  whether the weights came from ASB, a synthetic distribution, or random
-  initialization.
-
-  Training this specific benchmarking model on ASB would create an
-  unnecessary and unfair-looking coupling: Niyam-AI's classification
-  accuracy is compared against NeMo / Llama Prompt Guard 2 / GPT-OSS-
-  Safeguard using a SEPARATE, properly cross-validated classifier
-  (evaluation/cross_validated_eval.py, 5-fold, out-of-fold, F1=89.2%).
-  That is the only model whose accuracy is compared against baselines.
-
-  model's only job is proving the ZK pipeline works and measuring
-  its latency/proof-size overhead -- a claim that is completely
-  independent of any specific dataset. 
-  Training it on synthetic data(via ezkl's own gen_random_data utility, built for exactly this
-  purpose) removes any appearance of dataset leakage or unfair
-  advantage, and removes the earlier features_dataset.json / ASB path
-  dependency entirely -- this script now runs standalone with zero
-  external dataset requirement.
 """
 
-import os
+from __future__ import annotations
+
+import argparse
 import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import confusion_matrix
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-INPUT_DIM = 11
+from benchmark_eval.judge_model import extract_features, JudgeInput, label_intent_violation
+
+HERE = Path(__file__).resolve().parent
+
+INPUT_DIM = 11      # matches extract_features() exactly
 HIDDEN_DIM = 8
-N_SYNTHETIC_SAMPLES = 2000
+EPOCHS = 300
+LR = 0.01
+SEED = 42
+
+FALLBACK_SCOPE = ["proceed_transaction", "get_balance", "get_transaction_history"]
 
 
 class JudgeFFN(nn.Module):
-    """Same architecture as before -- small, ZK-circuit-friendly.
-    Deliberately tiny to keep the arithmetic constraint count low
-    (paper's stated target: <2^16 = 65,536 constraints)."""
+    """
+    11 inputs -> 8 hidden (ReLU) -> 2 classes.
+
+    Deliberately small: the circuit must stay well under 2^16 arithmetic
+    constraints for proof generation to remain in the single-digit-second
+    range. This architecture compiles to 431 constraint rows (logrows=15).
+    """
+
     def __init__(self, input_dim: int = INPUT_DIM, hidden_dim: int = HIDDEN_DIM):
         super().__init__()
         self.net = nn.Sequential(
@@ -61,103 +57,124 @@ class JudgeFFN(nn.Module):
         return self.net(x)
 
 
-def generate_synthetic_data(n_samples: int, input_dim: int, seed: int = 42):
+def build_dataset(dataset_path: str):
+    """Extract the 11-dim feature vector and intent-violation label per scenario."""
+    with open(dataset_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    X, y = [], []
+    for item in data:
+        tools = [t for env in item.get("environments", [])
+                 for t in env.get("tools", [])]
+        first_tool = tools[0] if tools else "no_tool"
+        inp = JudgeInput(
+            instruction=item["instruction"],
+            tool_name=first_tool,
+            payload={},
+            agent_declared_scope=tools or FALLBACK_SCOPE,
+        )
+        feats = extract_features(inp)
+        if len(feats) != INPUT_DIM:
+            raise ValueError(
+                f"extract_features() returned {len(feats)} features, "
+                f"expected {INPUT_DIM}. Update INPUT_DIM and the circuit."
+            )
+        X.append(feats)
+        y.append(1 - label_intent_violation(item["instruction"]))  # 1=safe, 0=violation
+
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int64)
+
+
+def train(X: np.ndarray, y: np.ndarray, epochs: int = EPOCHS,
+          lr: float = LR, seed: int = SEED, verbose: bool = True) -> JudgeFFN:
     """
-    Generate a synthetic binary classification dataset with a similar
-    STRUCTURE to the real hand-crafted feature vector (a mix of binary
-    flag-like features and continuous 0-1 score-like features), but
-    with NO connection to any real instruction text or ASB scenario.
+    Train on the full array passed in. Callers doing cross-validation pass
+    only their training fold; this function has no split logic of its own.
     """
-    rng = np.random.default_rng(seed)
+    torch.manual_seed(seed)
+    model = JudgeFFN()
+
+    n_safe = int(y.sum())
+    n_unsafe = len(y) - n_safe
+    # Class weights: ~9.6:1 imbalance (1,811 safe / 189 violation on full ASB)
+    weight = torch.tensor(
+        [len(y) / (2 * max(n_unsafe, 1)), len(y) / (2 * max(n_safe, 1))],
+        dtype=torch.float32,
+    )
+    criterion = nn.CrossEntropyLoss(weight=weight)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    X_t = torch.tensor(X, dtype=torch.float32)
+    y_t = torch.tensor(y, dtype=torch.long)
+
+    model.train()
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+        loss = criterion(model(X_t), y_t)
+        loss.backward()
+        optimizer.step()
+        if verbose and (epoch + 1) % 100 == 0:
+            print(f"    epoch {epoch+1}/{epochs}: loss={loss.item():.4f}")
+
+    model.eval()
+    return model
 
 
-    n_binary = input_dim // 2
-    n_continuous = input_dim - n_binary
-
-    X_binary = rng.integers(0, 2, size=(n_samples, n_binary)).astype(np.float32)
-    X_continuous = rng.uniform(0, 1, size=(n_samples, n_continuous)).astype(np.float32)
-    X = np.concatenate([X_binary, X_continuous], axis=1)
-
-
-    flag_score = X_binary.sum(axis=1)
-    cont_score = X_continuous.sum(axis=1)
-    combined = flag_score / max(n_binary, 1) + cont_score / max(n_continuous, 1)
-    y = (combined < 1.0).astype(np.int64)   # 1 = "safe", 0 = "unsafe"
-
-    return X, y
+def predict(model: JudgeFFN, X: np.ndarray) -> np.ndarray:
+    with torch.no_grad():
+        logits = model(torch.tensor(X, dtype=torch.float32))
+    return torch.argmax(logits, dim=1).numpy()
 
 
 def main():
-    X, y = generate_synthetic_data(N_SYNTHETIC_SAMPLES, INPUT_DIM)
-    print(f"Generated {len(X)} synthetic samples, {X.shape[1]} features "
-          f"(NOT derived from ASB or any real dataset)")
-    print(f"Synthetic label distribution: safe={int(y.sum())}, "
-          f"unsafe={len(y)-int(y.sum())}")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dataset", default="data/agent_safetybench/released_data.json")
+    args = ap.parse_args()
 
-    split = int(0.8 * len(X))
-    X_tr, X_te = X[:split], X[split:]
-    y_tr, y_te = y[:split], y[split:]
+    print("Building features from Agent-SafetyBench...")
+    X, y = build_dataset(args.dataset)
+    print(f"  {len(X)} scenarios | {X.shape[1]} features "
+          f"| safe={int(y.sum())} violation={len(y)-int(y.sum())}\n")
 
-    X_tr_t = torch.tensor(X_tr, dtype=torch.float32)
-    y_tr_t = torch.tensor(y_tr, dtype=torch.long)
-    X_te_t = torch.tensor(X_te, dtype=torch.float32)
-    y_te_t = torch.tensor(y_te, dtype=torch.long)
+    print("Training deployment Judge on the full dataset...")
+    model = train(X, y)
 
-    model = JudgeFFN(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    pred = predict(model, X)
+    cm = confusion_matrix(y, pred, labels=[0, 1])
+    TP, FN = int(cm[0][0]), int(cm[0][1])
+    FP, TN = int(cm[1][0]), int(cm[1][1])
+    acc = (TP + TN) / len(y) * 100
+    print(f"\n  In-sample fit (sanity check only, NOT a reported metric):")
+    print(f"    TP={TP} TN={TN} FP={FP} FN={FN}  accuracy={acc:.1f}%")
 
-    print(f"\nTraining JudgeFFN on synthetic data: "
-          f"input_dim={INPUT_DIM}, hidden_dim={HIDDEN_DIM}")
-    model.train()
-    for epoch in range(200):
-        optimizer.zero_grad()
-        logits = model(X_tr_t)
-        loss = criterion(logits, y_tr_t)
-        loss.backward()
-        optimizer.step()
-        if (epoch + 1) % 50 == 0:
-            print(f"  epoch {epoch+1}: loss={loss.item():.4f}")
+    torch.save(model.state_dict(), HERE / "judge_ffn.pt")
+    print(f"\nSaved weights      -> {HERE / 'judge_ffn.pt'}")
 
-    model.eval()
-    with torch.no_grad():
-        test_pred = torch.argmax(model(X_te_t), dim=1).numpy()
-    synthetic_acc = (test_pred == y_te).mean() * 100
-    print(f"\nSynthetic held-out accuracy: {synthetic_acc:.1f}% "
-          f"(NOT a paper claim -- only confirms weights are non-degenerate)")
-
-    torch.save(model.state_dict(), os.path.join(HERE, "judge_ffn.pt"))
-    print(f"\nSaved PyTorch weights -> {HERE}/judge_ffn.pt")
-
-    dummy_input = torch.randn(1, INPUT_DIM)
-    onnx_path = os.path.join(HERE, "judge_ffn.onnx")
+    dummy = torch.randn(1, INPUT_DIM)
+    onnx_path = HERE / "judge_ffn.onnx"
     torch.onnx.export(
-        model, dummy_input, onnx_path,
+        model, dummy, str(onnx_path),
         input_names=["input"], output_names=["output"],
-        dynamic_axes=None,
-        opset_version=11,
-        dynamo=False,
+        opset_version=11, dynamo=False,
     )
-    print(f"Exported ONNX -> {onnx_path}")
+    print(f"Exported ONNX      -> {onnx_path}")
 
-    # Sample input for EZKL calibration/witness generation
-    sample_input = X_te[0].tolist()
-    with open(os.path.join(HERE, "input.json"), "w") as f:
-        json.dump({"input_data": [sample_input]}, f)
-    print(f"Saved sample input -> {HERE}/input.json")
+    (HERE / "input.json").write_text(json.dumps({"input_data": [X[0].tolist()]}))
+    print(f"Saved sample input -> {HERE / 'input.json'}")
 
-    metrics = {
-        "note": "Synthetic-data model for ZK circuit feasibility/timing "
-                "demonstration ONLY. Not trained on ASB. Not compared "
-                "against any baseline. See docstring for rationale.",
-        "synthetic_held_out_accuracy": round(float(synthetic_acc), 1),
-        "input_dim": INPUT_DIM,
-        "hidden_dim": HIDDEN_DIM,
-    }
-    with open(os.path.join(HERE, "pytorch_ffn_metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=2)
-
-    return metrics
+    (HERE / "judge_training_meta.json").write_text(json.dumps({
+        "trained_on": "Agent-SafetyBench (thu-coai, 2024), full 2000 scenarios",
+        "label_fn": "core.judge_model.label_intent_violation",
+        "architecture": f"{INPUT_DIM} -> {HIDDEN_DIM} -> 2 (ReLU)",
+        "epochs": EPOCHS, "lr": LR, "seed": SEED,
+        "n_scenarios": int(len(X)),
+        "class_balance": {"safe": int(y.sum()), "violation": int(len(y) - y.sum())},
+        "note": "Deployment model. Generalization is estimated by "
+                "evaluation/cross_validated_eval.py, not by the in-sample "
+                "fit printed during training.",
+    }, indent=2))
+    print(f"Saved metadata     -> {HERE / 'judge_training_meta.json'}")
+    print("\nNext: python ezkl_pipeline/run_ezkl_pipeline.py")
 
 
 if __name__ == "__main__":

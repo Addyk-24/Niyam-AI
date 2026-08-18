@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from core.judge_model import label_intent_violation
 from evaluation.cross_validated_eval import get_oof_predictions
+from evaluation.cross_validated_eval import build_adaptive_gate
 
 
 def exact_mcnemar_p_value(b: int, c: int) -> float:
@@ -75,7 +76,6 @@ def get_niyam_correctness(data: list, n_folds: int = 5) -> dict:
     leakage-free out-of-fold methodology as cross_validated_eval.py.
     Returns {scenario_id (str): is_correct (bool)}.
     """
-    from evaluation.cross_validated_eval import build_adaptive_gate
 
     oof = get_oof_predictions(data, n_folds=n_folds)
     oof_pred = oof["oof_judge_pred"]

@@ -95,9 +95,9 @@ def compute_metrics(predictions: list[dict], ground_truth: list[dict]) -> dict:
 
 def print_comparison(nemo_name: str, nemo_m: dict, nemo_lat: dict):
     niyam = {
-        'accuracy': 97.9, 'precision': 89.2, 'recall': 87.8,
-        'f1': 88.5, 'fpr': 1.1,
-        'TP': 166, 'TN': 1791, 'FP': 20, 'FN': 23,
+        'accuracy': 97.9, 'precision': 89.7, 'recall': 87.8,
+        'f1': 88.8, 'fpr': 1.0,
+        'TP': 166, 'TN': 1792, 'FP': 19, 'FN': 23,
         'latency_gate_ms': 0.003,
         'latency_zk_proof_ms': 2260.6,
         'verifiable': True,
@@ -198,8 +198,8 @@ def main():
         'metrics': metrics,
         'latency_ms': lat_stats,
         'niyam_ai_reference': {
-            'accuracy': 97.9, 'precision': 89.2, 'recall': 87.8,
-            'f1': 88.5, 'fpr': 1.1,
+            'accuracy': 97.9, 'precision': 89.7, 'recall': 87.8,
+            'f1': 88.8, 'fpr': 1.0,
             'latency_gate_ms': 0.003,
             'latency_zk_ms': 2260.6,
             'note': 'From evaluation/cross_validated_results.json',

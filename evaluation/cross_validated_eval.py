@@ -1,6 +1,7 @@
 """
 Canonical Evaluation
 
+
 stratified k-fold cross-validation with OUT-OF-FOLD
   predictions. For k=5 folds:
     - Train on folds {2,3,4,5}, predict on held-out fold {1}
@@ -13,9 +14,6 @@ stratified k-fold cross-validation with OUT-OF-FOLD
   both are now "has this system ever seen this exact example before
   it was scored: No."
 
-  This is the standard, defensible way to report cross-validated
-  metrics on a fixed dataset in any ML paper, and it is the number
-  that must be used in Table IV going forward.
 
 """
 
@@ -23,11 +21,9 @@ import sys, os, json, argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-import scipy.sparse as sp
 from sklearn.model_selection import StratifiedKFold
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
+
+from ezkl_pipeline.train_pytorch_judge import JudgeFFN, train as train_ffn, predict as predict_ffn
 
 from core.judge_model import extract_features, JudgeInput, label_intent_violation
 from schema.intent_contract import IntentContract
@@ -77,29 +73,24 @@ def build_dataset(data: list):
 
 
 def train_fold_model(texts_tr, hand_tr, y_tr):
-    """Train the same TF-IDF + hand-features + LogisticRegression pipeline
-    used for the main Niyam-AI result, but scoped to THIS fold's train
-    split only."""
-    tfidf = TfidfVectorizer(max_features=3000, ngram_range=(1, 2),
-                            sublinear_tf=True, min_df=2)
-    scaler = StandardScaler()
+    """
+    Train the Judge FFN on THIS fold's training split only.
 
-    X_tfidf = tfidf.fit_transform(texts_tr)
-    X_hand = scaler.fit_transform(hand_tr)
-    X_combined = sp.hstack([X_tfidf, sp.csr_matrix(X_hand)])
-
-    clf = LogisticRegression(C=1.0, max_iter=1000, class_weight="balanced",
-                             random_state=42)
-    clf.fit(X_combined, y_tr)
-
-    return tfidf, scaler, clf
+    Note that `texts_tr` is accepted but unused: the Judge operates on the
+    11-dimensional hand-crafted feature vector, not on raw text. The
+    parameter is retained so the call signature matches the rest of the
+    pipeline. The earlier TF-IDF variant consumed it; that model was
+    retired because a 3,011-dimensional representation does not compile
+    into a practical zk-SNARK circuit, leaving its decisions unprovable.
+    """
+    return train_ffn(np.asarray(hand_tr, dtype=np.float32),
+                     np.asarray(y_tr, dtype=np.int64),
+                     verbose=False)
 
 
-def predict_fold(tfidf, scaler, clf, texts_te, hand_te):
-    X_tfidf = tfidf.transform(texts_te)
-    X_hand = scaler.transform(hand_te)
-    X_combined = sp.hstack([X_tfidf, sp.csr_matrix(X_hand)])
-    return clf.predict(X_combined)
+def predict_fold(model, texts_te, hand_te):
+    """Out-of-fold prediction. 1 = safe, 0 = violation."""
+    return predict_ffn(model, np.asarray(hand_te, dtype=np.float32))
 
 
 def get_oof_predictions(data: list, n_folds: int = 5, seed: int = 42) -> dict:
@@ -127,10 +118,10 @@ def get_oof_predictions(data: list, n_folds: int = 5, seed: int = 42) -> dict:
     fold_assignment = np.zeros(n, dtype=int)
 
     for fold_idx, (train_idx, test_idx) in enumerate(skf.split(texts, labels)):
-        tfidf, scaler, clf = train_fold_model(
+        model = train_fold_model(
             texts[train_idx], hand_feats[train_idx], labels[train_idx]
         )
-        fold_pred = predict_fold(tfidf, scaler, clf, texts[test_idx], hand_feats[test_idx])
+        fold_pred = predict_fold(model, texts[test_idx], hand_feats[test_idx])
         oof_judge_pred[test_idx] = fold_pred
         fold_assignment[test_idx] = fold_idx
 
@@ -152,7 +143,6 @@ def run_cross_validation(data: list, n_folds: int = 5, seed: int = 42):
 
     print(f"  ({n_folds}-fold stratified CV already computed via get_oof_predictions)")
 
-    # ── Apply the gate + out-of-fold Judge decision, per scenario ──────────
     TP=TN=FP=FN=0
     per_scenario = []
     for i, item in enumerate(data):
@@ -170,9 +160,7 @@ def run_cross_validation(data: list, n_folds: int = 5, seed: int = 42):
                     break
 
         if not blocked:
-            # Use the OUT-OF-FOLD prediction — this model never saw
-            # scenario i during its own training fold.
-            judge_decision = oof_judge_pred[i]   # 1=safe, 0=unsafe
+            judge_decision = oof_judge_pred[i]
             if judge_decision == 0:
                 blocked = True
 
@@ -251,9 +239,11 @@ def run(dataset_path: str, n_folds: int = 5):
         "leakage_free": True,
         "canonical_metrics": metrics,
         "per_risk_category": risk_breakdown,
-        "note": "THIS is the correct number for Table IV baseline comparison. "
-                "canonical_eval.py's number (91.6% F1) has train-test leakage "
-                "and must not be used for the baseline comparison table.",
+        "note": "Canonical result for Table IV. Produced by 5-fold stratified "
+                "cross-validation with out-of-fold predictions; every scenario "
+                "is scored by a fold-model that never saw it during training. "
+                "Do not override --n-folds: Tables IV, VI and VII all depend "
+                "on this exact 5-fold split.",
     }
     out_path = os.path.join(os.path.dirname(__file__), "cross_validated_results.json")
     with open(out_path, "w") as f:

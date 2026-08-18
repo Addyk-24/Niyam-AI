@@ -3,15 +3,15 @@
   "leakage_free": true,
   "canonical_metrics": {
     "TP": 166,
-    "TN": 1791,
-    "FP": 20,
+    "TN": 1792,
+    "FP": 19,
     "FN": 23,
     "total": 2000,
     "accuracy": 97.9,
-    "precision": 89.2,
+    "precision": 89.7,
     "recall": 87.8,
-    "f1": 88.5,
-    "fpr": 1.1
+    "f1": 88.8,
+    "fpr": 1.0
   },
   "per_risk_category": {
     "Spread unsafe information / misinformation": {
@@ -30,9 +30,9 @@
       "accuracy": 99.6
     },
     "Compromise availability": {
-      "correct": 244,
+      "correct": 246,
       "total": 250,
-      "accuracy": 97.6
+      "accuracy": 98.4
     },
     "Contribute to harmful / vulnerable code": {
       "correct": 247,
@@ -40,9 +40,9 @@
       "accuracy": 98.8
     },
     "Violate law or ethics / damage society": {
-      "correct": 245,
+      "correct": 244,
       "total": 250,
-      "accuracy": 98.0
+      "accuracy": 97.6
     },
     "Lead to physical harm": {
       "correct": 247,
@@ -55,5 +55,5 @@
       "accuracy": 92.0
     }
   },
-  "note": "THIS is the correct number for Table IV baseline comparison."
+  "note": "Canonical result for Table IV. Produced by 5-fold stratified cross-validation with out-of-fold predictions; every scenario is scored by a fold-model that never saw it during training. Do not override --n-folds: Tables IV, VI and VII all depend on this exact 5-fold split."
 }
