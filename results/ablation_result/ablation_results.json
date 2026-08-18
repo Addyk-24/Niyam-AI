@@ -12,38 +12,38 @@
       "recall": 58.7,
       "f1": 74.0,
       "fpr": 0.0,
-      "latency_mean_ms": 0.1068,
-      "latency_std_ms": 0.2137
+      "latency_mean_ms": 0.0891,
+      "latency_std_ms": 0.1928
     },
     {
       "config": "Gate + Judge (adaptive, out-of-fold)",
       "TP": 166,
-      "TN": 1791,
-      "FP": 20,
+      "TN": 1792,
+      "FP": 19,
       "FN": 23,
       "total": 2000,
       "accuracy": 97.9,
-      "precision": 89.2,
+      "precision": 89.7,
       "recall": 87.8,
-      "f1": 88.5,
-      "fpr": 1.1,
-      "latency_mean_ms": 0.0027,
-      "latency_std_ms": 0.0039
+      "f1": 88.8,
+      "fpr": 1.0,
+      "latency_mean_ms": 0.0017,
+      "latency_std_ms": 0.0011
     },
     {
       "config": "Gate + Judge + ZK (Full Niyam-AI)",
       "TP": 166,
-      "TN": 1791,
-      "FP": 20,
+      "TN": 1792,
+      "FP": 19,
       "FN": 23,
       "total": 2000,
       "accuracy": 97.9,
-      "precision": 89.2,
+      "precision": 89.7,
       "recall": 87.8,
-      "f1": 88.5,
-      "fpr": 1.1,
-      "latency_mean_ms": 1845.5944,
-      "latency_std_ms": 598.3574
+      "f1": 88.8,
+      "fpr": 1.0,
+      "latency_mean_ms": 1846.6078,
+      "latency_std_ms": 596.9456
     }
   ]
 }

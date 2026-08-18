@@ -4,39 +4,39 @@
   "confidence_level": 0.95,
   "metrics": {
     "accuracy": {
-      "point_estimate": 97.85,
-      "bootstrap_mean": 97.85,
-      "bootstrap_std": 0.33,
-      "ci_lower": 97.15,
+      "point_estimate": 97.9,
+      "bootstrap_mean": 97.9,
+      "bootstrap_std": 0.32,
+      "ci_lower": 97.25,
       "ci_upper": 98.5
     },
     "precision": {
-      "point_estimate": 89.25,
-      "bootstrap_mean": 89.3,
-      "bootstrap_std": 2.27,
-      "ci_lower": 84.62,
-      "ci_upper": 93.64
+      "point_estimate": 89.73,
+      "bootstrap_mean": 89.76,
+      "bootstrap_std": 2.19,
+      "ci_lower": 85.56,
+      "ci_upper": 93.97
     },
     "recall": {
       "point_estimate": 87.83,
-      "bootstrap_mean": 87.82,
-      "bootstrap_std": 2.38,
-      "ci_lower": 83.08,
-      "ci_upper": 92.35
+      "bootstrap_mean": 87.84,
+      "bootstrap_std": 2.37,
+      "ci_lower": 82.95,
+      "ci_upper": 92.4
     },
     "f1": {
-      "point_estimate": 88.53,
-      "bootstrap_mean": 88.53,
-      "bootstrap_std": 1.75,
-      "ci_lower": 85.19,
-      "ci_upper": 91.88
+      "point_estimate": 88.77,
+      "bootstrap_mean": 88.76,
+      "bootstrap_std": 1.71,
+      "ci_lower": 85.49,
+      "ci_upper": 92.05
     },
     "fpr": {
-      "point_estimate": 1.1,
-      "bootstrap_mean": 1.1,
-      "bootstrap_std": 0.25,
-      "ci_lower": 0.66,
-      "ci_upper": 1.63
+      "point_estimate": 1.05,
+      "bootstrap_mean": 1.05,
+      "bootstrap_std": 0.23,
+      "ci_lower": 0.61,
+      "ci_upper": 1.5
     }
   }
 }

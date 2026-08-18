@@ -29,7 +29,7 @@ from CPU scheduling and thermal state.
 import sys, os, json, argparse, random
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.judge_model import JudgeModel, JudgeInput, label_intent_violation
+from core.judge_model import JudgeInput, label_intent_violation
 from evaluation.ablation_study import build_adaptive_gate, FINANCE_ALLOWED
 from evaluation.cross_validated_eval import get_oof_predictions
 

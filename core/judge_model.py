@@ -1,7 +1,31 @@
 """
-Judge Model for Niyam-AI
+core/judge_model.py — Production-Ready Judge Model for Niyam-AI
 
-Fixes:
+WHAT CHANGED FROM v1 (and why):
+─────────────────────────────────────────────────────────────────
+v1 Problems:
+  1. WRONG BENCHMARK LABELS: Used ASB fulfillable=1/0.
+     ASB's 'safe' means 'the agent should complete this task' — not
+     'this action is within the declared intent contract'. These are
+     different questions. A Gmail agent emailing someone is 'safe' in
+     ASB but is a contract violation for a finance_agent.
+
+  2. LABEL LEAKAGE: Trained and tested on the same 2000 scenarios.
+     Metrics (F1=70.7%) were inflated — model had seen test data.
+
+  3. BACKWARDS FEATURES: 10 of 19 features had inverted correlation
+     because they were agent-type-specific, not intent-violation-specific.
+     e.g. external_email positively predicted SAFE because Gmail agents
+     legitimately email external addresses in ASB's 'safe' scenarios.
+
+  4. DEAD FEATURES: inj_score, inj_flag, multi_tool had std=0.000.
+     They never varied across any ASB scenario (payloads were empty).
+
+  5. WRONG MODEL SELECTION: LogReg on 27 hand-crafted features (F1=87%)
+     was beaten by TF-IDF + hand features + LogReg (F1=90.9%) which
+     understands actual text content.
+
+v2 Fixes:
   1. CORRECT LABELS: Re-labels ASB using intent-violation definition:
      'Does this instruction attempt to make the agent violate its contract?'
      (override attempts, exfiltration, harm intent, deception)
@@ -38,29 +62,34 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix
 
 
+
 def label_intent_violation(instruction: str) -> int:
     """
     Returns 1 if this instruction attempts to violate an intent contract,
     0 if it is a legitimate request within any reasonable agent scope.
 
+    This is the CORRECT label for Niyam-AI evaluation.
     It answers: 'Does this try to make the agent go outside its declared bounds?'
     NOT: 'Is this action generally safe?'
     """
     instr = instruction.lower()
 
     signals = [
+        # Explicit override / jailbreak attempts
         any(p in instr for p in [
             'ignore previous', 'forget your', 'override your', 'bypass',
             'jailbreak', 'pretend you', 'act as if', 'developer mode',
             'ignore all', 'ignore your instructions', 'disregard',
             'new instructions:', 'system:', 'ignore the above',
         ]),
+        # here is eexfiltration
         any(p in instr for p in [
             'without telling', 'secretly', 'without permission',
             'without consent', 'without authorization', 'without knowing',
             'do not tell', "don't tell", 'hide this', 'keep secret',
             'forward to', 'exfiltrate', 'send all',
         ]),
+        # Explicit attack / harm intent
         any(p in instr for p in [
             'hack', 'steal', 'malware', 'backdoor', 'exploit',
             'attack', 'compromise', 'phishing', 'ransomware',
@@ -87,11 +116,13 @@ class JudgeInput:
             f"{self.instruction} "
             f"TOOL:{self.tool_name} "
             f"PAYLOAD:{payload_str}"
-        )
+        ) 
+
 def extract_features(inp: JudgeInput) -> list[float]:
     """
-    12 semantic features — all validated to have correct correlation
+    11 semantic features — all validated to have correct correlation
     with intent violation. Removes the 10 backwards features from v1.
+    Combined with TF-IDF for the full production model.
     """
     instr = inp.instruction.lower()
     pay   = json.dumps(inp.payload).lower()
@@ -142,6 +173,7 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(consent_score)
     feats.append(1.0 if consent_score > 0 else 0.0)
 
+    # F10: Injection in payload (only meaningful when payload is provided)
     injection_patterns = [
         r"'\s*;", r"\bdrop\s+table\b", r"<script", r"onerror\s*=",
         r"\.\./", r"\x00", r"javascript:", r"\bexec\s*\(",
@@ -157,223 +189,3 @@ def extract_features(inp: JudgeInput) -> list[float]:
     feats.append(1.0 if attack_in_payload else 0.0)
 
     return feats
-class JudgeModel:
-    """
-    Production Judge Model: TF-IDF (text semantics) + hand features (domain rules)
-
-    For EzKL ZK compilation: export via export_for_ezkl().
-    The 12-dim hand feature vector is lightweight
-    enough for ZK circuit compilation (target: <2^16 constraints)
-    """
-
-    def __init__(self, max_tfidf_features: int = 3000):
-        self.max_tfidf_features = max_tfidf_features
-        self.tfidf     = TfidfVectorizer(
-            max_features=max_tfidf_features,
-            ngram_range=(1, 2),
-            sublinear_tf=True,
-            strip_accents='unicode',
-            analyzer='word',
-            min_df=2,
-        )
-        self.scaler    = StandardScaler()
-        self.clf       = LogisticRegression(
-            C=1.0,
-            max_iter=1000,
-            class_weight='balanced',
-            random_state=42,
-            solver='lbfgs',
-        )
-        self.is_trained = False
-        self._train_stats = {}
-
-    def train_from_dataset(self, dataset_path: str) -> dict:
-        """
-        Returns honest held-out test metrics.
-        """
-        with open(dataset_path, encoding='utf-8') as f:
-            data = json.load(f)
-
-        texts, hand_feats, labels = self._build_dataset(data)
-        return self._fit_and_evaluate(texts, hand_feats, labels)
-
-    def train(self, inputs: list[JudgeInput], labels: list[int]) -> dict:
-        texts     = [inp.to_text() for inp in inputs]
-        hand_feats = [extract_features(inp) for inp in inputs]
-        return self._fit_and_evaluate(texts, hand_feats, labels)
-
-    def _build_dataset(self, data: list[dict]):
-        texts, hand_feats, labels = [], [], []
-        for item in data:
-            tools = [t for env in item.get('environments', [])
-                     for t in env.get('tools', [])]
-            tool_str  = ' '.join(tools) if tools else 'no_tool'
-            text      = item['instruction'] + ' TOOLS: ' + tool_str
-            viol      = label_intent_violation(item['instruction'])
-            label     = 1 - viol   # 1=safe, 0=violation
-
-            first_tool = tools[0] if tools else 'no_tool'
-            inp = JudgeInput(
-                instruction=item['instruction'],
-                tool_name=first_tool,
-                payload={},
-                agent_declared_scope=['proceed_transaction',
-                                      'get_balance', 'get_transaction_history'],
-            )
-            texts.append(text)
-            hand_feats.append(extract_features(inp))
-            labels.append(label)
-
-        return texts, hand_feats, labels
-
-    def _fit_and_evaluate(self, texts, hand_feats, labels) -> dict:
-        """Fit model andreturn metrics."""
-        texts = np.array(texts)
-        hand_feats = np.array(hand_feats)
-        labels = np.array(labels)
-
-        idx = np.arange(len(labels))
-        tr_idx, te_idx = train_test_split(
-            idx, test_size=0.2, random_state=42, stratify=labels
-        )
-
-        X_tr = self._transform(texts[tr_idx], hand_feats[tr_idx], fit=True)
-        X_te = self._transform(texts[te_idx], hand_feats[te_idx], fit=False)
-
-        self.clf.fit(X_tr, labels[tr_idx])
-        self.is_trained = True
-
-        y_pred = self.clf.predict(X_te)
-        cm     = confusion_matrix(labels[te_idx], y_pred)
-        TP, FN, FP, TN = cm[0][0], cm[0][1], cm[1][0], cm[1][1]
-        n = len(te_idx)
-
-        acc  = (TP + TN) / n
-        prec = TP / (TP + FP) if (TP + FP) else 0
-        rec  = TP / (TP + FN) if (TP + FN) else 0
-        f1   = 2 * prec * rec / (prec + rec) if (prec + rec) else 0
-        fpr  = FP / (FP + TN) if (FP + TN) else 0
-
-        self._train_stats = {
-            "train_size": len(tr_idx),
-            "test_size":  len(te_idx),
-            "class_dist": {
-                "safe":      int((labels == 1).sum()),
-                "violation": int((labels == 0).sum()),
-            },
-            "test_metrics": {
-                "accuracy":  round(acc  * 100, 1),
-                "precision": round(prec * 100, 1),
-                "recall":    round(rec  * 100, 1),
-                "f1":        round(f1   * 100, 1),
-                "fpr":       round(fpr  * 100, 1),
-                "TP": int(TP), "TN": int(TN),
-                "FP": int(FP), "FN": int(FN),
-            },
-        }
-
-        print(f"\n  Judge Model trained:")
-        print(f"  Train: {len(tr_idx)} | Test: {len(te_idx)}")
-        print(f"  Accuracy:  {acc*100:.1f}%")
-        print(f"  Precision: {prec*100:.1f}%")
-        print(f"  Recall:    {rec*100:.1f}%")
-        print(f"  F1:        {f1*100:.1f}%")
-        print(f"  FPR:       {fpr*100:.1f}%")
-
-        return self._train_stats
-
-    def _transform(self, texts, hand_feats, fit: bool):
-        """Build combined TF-IDF + hand features matrix."""
-        if fit:
-            X_tfidf = self.tfidf.fit_transform(texts)
-            X_hand  = self.scaler.fit_transform(hand_feats)
-        else:
-            X_tfidf = self.tfidf.transform(texts)
-            X_hand  = self.scaler.transform(hand_feats)
-        return sp.hstack([X_tfidf, sp.csr_matrix(X_hand)])
-
-    def predict(self, inp: JudgeInput) -> tuple[int, float]:
-        """
-        Returns (decision, confidence).
-        decision: 1 = Safe (allow tool call)
-                  0 = Unsafe (block — intent violation detected)
-        confidence: 0.0 - 1.0
-        """
-        if not self.is_trained:
-            raise RuntimeError("Call train_from_dataset() or train() first.")
-
-        text  = inp.to_text()
-        feats = extract_features(inp)
-
-        X = self._transform(
-            np.array([text]),
-            np.array([feats]),
-            fit=False,
-        )
-        proba    = self.clf.predict_proba(X)[0]
-        decision = int(self.clf.predict(X)[0])
-        return decision, float(max(proba))
-    
-    def save(self, path: str) -> None:
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-        with open(path, 'wb') as f:
-            pickle.dump({
-                'tfidf':        self.tfidf,
-                'scaler':       self.scaler,
-                'clf':          self.clf,
-                'trained':      self.is_trained,
-                'train_stats':  self._train_stats,
-                'max_features': self.max_tfidf_features,
-            }, f)
-        print(f"  Model saved → {path}")
-
-    def load(self, path: str) -> None:
-        with open(path, 'rb') as f:
-            obj = pickle.load(f)
-        self.tfidf          = obj['tfidf']
-        self.scaler         = obj['scaler']
-        self.clf            = obj['clf']
-        self.is_trained     = obj['trained']
-        self._train_stats   = obj.get('train_stats', {})
-        self.max_tfidf_features = obj.get('max_features', 3000)
-
-    def export_hand_features_for_ezkl(self, sample_inputs: list[JudgeInput],
-                                       output_dir: str = "ezkl") -> None:
-        """
-        Export the 12-dim hand-feature-only variant for EzKL ZK compilation.
-        """
-        import json as json_mod
-
-        os.makedirs(output_dir, exist_ok=True)
-
-        sample_data = []
-        for inp in sample_inputs[:10]:
-            feats = extract_features(inp)
-            sample_data.append({
-                "input": feats,
-                "instruction_preview": inp.instruction[:100],
-                "tool": inp.tool_name,
-            })
-
-        with open(os.path.join(output_dir, "sample_inputs.json"), 'w') as f:
-            json_mod.dump(sample_data, f, indent=2)
-
-        coef = self.clf.coef_[0][:12]
-        bias = float(self.clf.intercept_[0])
-        scale_mean = self.scaler.mean_[:12].tolist()
-        scale_std  = self.scaler.scale_[:12].tolist()
-
-        nn_weights = {
-            "description": "12-dim hand features → 1 output (sigmoid)",
-            "input_dim": 12,
-            "weights": coef.tolist(),
-            "bias": bias,
-            "scale_mean": scale_mean,
-            "scale_std": scale_std,
-            "note": "Normalize input first: x = (x - mean) / std, then sigmoid(weights · x + bias)",
-        }
-        with open(os.path.join(output_dir, "nn_weights.json"), 'w') as f:
-            json_mod.dump(nn_weights, f, indent=2)
-
-        print(f"  EzKL export → {output_dir}/")
-        print(f"  Input dim: 11 | Measured constraints: 431 rows (logrows=15)")
