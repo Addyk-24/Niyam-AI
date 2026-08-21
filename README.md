@@ -180,7 +180,7 @@ niyam-ai/
 │   └── execution_ledger.py       # append-only, hash-chained audit log
 ├── integrations/
 │   ├── llm_middleware.py         # 5-layer enforcement, proof-gated execution
-│   └── ollama_agent.py           # local-LLM agent (no API keys)
+│
 ├── policy/
 │   ├── guardrails.yaml
 │   └── policy_loader.py
