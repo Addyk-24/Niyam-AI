@@ -282,17 +282,9 @@ Both were found and fixed in this research prototype prior to any production use
 
 ## Citation
 
-```bibtex
-@misc{niyamai2026,
-  title  = {Niyam-AI: Cryptographically Verifiable Guardrails
-            for Autonomous LLM Agents},
-  author = {Katkar, Aditya and Karkele, Om and Mandhane, Kartik
-            and More, Manisha and Kashid, Yash},
-  year   = {2026},
-  note   = {Department of Computer Engineering, Vishwakarma Institute
-            of Technology, Pune, India}
-}
-```
+Citation details omitted for anonymous review. This repository accompanies a
+submission currently under review; author and institutional information will
+be restored upon acceptance.
 
 ## License
 
