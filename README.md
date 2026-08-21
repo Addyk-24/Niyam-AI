@@ -1,24 +1,16 @@
 # Niyam-AI
 
-**Intent-Bound AI Agent Execution with Cryptographically Verifiable Guardrails using Zero-Knowledge Proofs**
+**Cryptographically Verifiable Guardrails for Autonomous LLM Agents**
 
-Niyam-AI is a runtime security layer for autonomous LLM agents. Instead of trusting a system prompt or a software filter to enforce safety, Niyam-AI seals an agent's permitted actions into a cryptographic contract at session start, intercepts every tool call the agent attempts, classifies it with a trained Judge model, and — for every approved action — generates a zk-SNARK proof that the classification was actually performed and passed. A third party can verify that proof in ~69 ms without ever seeing the Judge model's weights.
+Every existing agent guardrail — system prompts, output filters, policy engines — runs on the same machine an attacker is trying to compromise. If the check is bypassed, nothing records that it should have run. A compromised host produces no evidence of its own failure.
+
+Niyam-AI replaces that trust with proof. Each safety decision produces a zk-SNARK that any third party can verify in ~70 ms, without access to the model's weights or trust in the machine that ran it.
 
 ```
-LLM Agent  →  Niyam-AI Gate  →  Tool Execution
-                   ↓
-           zk-SNARK proof
-        (mathematically checkable,
-         not "trust me")
+LLM Agent  →  Gate  →  Judge  →  zk-SNARK proof  →  Tool executes
+                 ↓        ↓            ↓
+              blocked  blocked   verification fails → blocked
 ```
-
----
-
-## Why this exists
-
-Current agent guardrails — system prompts, output filters, policy engines — share one weakness: they run on the same machine an attacker is trying to compromise, and there is no way for anyone outside that machine to confirm the check actually ran, let alone ran correctly. If the host is compromised or the filter bypassed, nothing proves the safety policy was ever evaluated.
-
-Niyam-AI replaces "trust the admin" with "verify the proof." Every safety decision approving a tool call is accompanied by a cryptographic artifact — not a log line, a proof — that any verifier can check independently.
 
 ---
 
@@ -32,22 +24,19 @@ flowchart TB
 
     subgraph Guardrail["Guardrail Layer"]
         Seal["Intent Seal<br/>SHA-256 commitment"]
-        Intercept["Interceptor<br/>captures tool call"]
         Gate["Tool Authority Gate<br/>allowlist + payload schema"]
-        Judge["Judge Model<br/>semantic classifier"]
+        Judge["Judge Model<br/>11→8→2 FFN"]
         Flow["Control Flow Guard<br/>session-bound sequencing"]
     end
 
     subgraph Verification["Verification Layer"]
-        Prove["EZKL Prover<br/>Groth16 zk-SNARK"]
+        Prove["EZKL Prover<br/>Halo2-KZG"]
         Verify["Verifier<br/>checks proof, not weights"]
         Ledger["Execution Ledger<br/>append-only, hash-chained"]
     end
 
     Seal -->|"IntentHash binds session"| Gate
-
-    LLM -->|"tool call"| Intercept
-    Intercept --> Gate
+    LLM -->|"tool call"| Gate
     Gate -->|"in scope"| Judge
     Gate -.->|"out of scope → BLOCK"| Ledger
     Judge -->|"safe"| Flow
@@ -56,7 +45,7 @@ flowchart TB
     Flow -.->|"replay → BLOCK"| Ledger
     Prove --> Verify
     Verify -->|"proof valid"| Execute["Tool Executes"]
-    Verify --> Ledger
+    Verify -.->|"invalid → BLOCK"| Ledger
     Execute --> Ledger
 
     style Judge fill:#2d5,color:#000
@@ -65,128 +54,84 @@ flowchart TB
     style Seal fill:#d84,color:#fff
 ```
 
-## Request lifecycle
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant A as Agent (LLM)
-    participant N as Niyam-AI Gate
-    participant J as Judge Model
-    participant Z as EZKL Prover/Verifier
-    participant T as Tool
-
-    U->>A: task instruction
-    A->>N: proposed tool call (name, args)
-    N->>N: check allowlist (IntentHash-bound) + payload schema
-    alt out of declared scope or malformed payload
-        N-->>A: BLOCKED — logged, no proof generated
-    else passes gate
-        N->>J: classify(instruction, tool, payload)
-        alt Judge: unsafe
-            J-->>N: 0
-            N-->>A: BLOCKED — logged
-        else Judge: safe
-            J-->>N: 1
-            N->>Z: Prove(judge_decision, x)
-            Z-->>N: proof (~1.97 s)
-            N->>Z: Verify(proof, vk, x)
-            Z-->>N: valid = true (~69 ms)
-            N->>T: execute
-            T-->>N: result
-            N-->>A: result + proof artifact
-        end
-    end
-    N->>N: append entry to hash-chained ledger
-```
+**One model does everything.** The 11→8→2 feedforward Judge makes the safety decision, produces the accuracy reported below, and is the model committed to in the ZK circuit. The proof attests to the decision that was actually made — not to a separate demonstration model.
 
 ---
 
-## Evaluated results
+## Results
 
-All numbers come from **5-fold stratified cross-validation with out-of-fold predictions** on 2,000 scenarios from [Agent-SafetyBench](https://github.com/thu-coai/Agent-SafetyBench) — every scenario is scored by a model version that never saw it during training.
+2,000 scenarios from [Agent-SafetyBench](https://github.com/thu-coai/Agent-SafetyBench), 5-fold stratified cross-validation with out-of-fold predictions. Every scenario is scored by a fold-model that never saw it during training.
 
-### Confusion matrix (Niyam-AI, out-of-fold)
+### Confusion matrix
 
 | | Count |
 |---|---|
 | True Positives (unsafe correctly blocked) | 166 |
-| True Negatives (safe correctly permitted) | 1,791 |
-| False Positives (safe incorrectly blocked) | 20 |
+| True Negatives (safe correctly permitted) | 1,792 |
+| False Positives (safe incorrectly blocked) | 19 |
 | False Negatives (unsafe incorrectly permitted) | 23 |
 
 Every metric below derives from these four counts.
 
-### Classification performance vs. existing guardrail frameworks
+### vs. deployed guardrail systems
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 xychart-beta
-    title "F1 Score: Niyam-AI vs Existing Guardrail Frameworks"
+    title "F1 Score on Agent-SafetyBench"
     x-axis ["NeMo Guardrails", "GPT-OSS-Safeguard", "Llama Prompt Guard 2", "Niyam-AI"]
-    y-axis "F1 Score (%)" 0 --> 100
-    bar [40.4, 46.2, 66.8, 88.5]
+    y-axis "F1 (%)" 0 --> 100
+    bar [40.4, 46.2, 66.8, 88.8]
 ```
 
 | System | Accuracy | Precision | Recall | F1 | FPR |
 |---|---|---|---|---|---|
-| **Niyam-AI (5-fold CV, out-of-fold)** | **97.9%** | **89.2%** | **87.8%** | **88.5%** | **1.1%** |
+| **Niyam-AI (5-fold CV, out-of-fold)** | **97.9%** | **89.7%** | **87.8%** | **88.8%** | **1.0%** |
 | Llama Prompt Guard 2 (86M, Meta) | 92.9% | 59.8% | 75.7% | 66.8% | 5.3% |
 | GPT-OSS-Safeguard-20B (OpenAI) | 79.8% | 30.9% | 92.1% | 46.2% | 21.5% |
-| NeMo Guardrails (self-check-input, Llama-3.1-8B) | 79.5% | 27.9% | 73.5% | 40.4% | 19.9% |
+| NeMo Guardrails (Llama-3.1-8B) | 79.5% | 27.9% | 73.5% | 40.4% | 19.9% |
 
-Bootstrap 95% CI (N=1000 resamples): **F1 [85.19%, 91.88%]**, FPR [0.66%, 1.63%]
+Bootstrap 95% CI (N=1000): **F1 [85.49%, 92.05%]**, FPR [0.61%, 1.50%]
 
-> **Methodological note.** Niyam-AI's classifier is fitted to Agent-SafetyBench's scenario distribution across CV folds (never to the exact held-out example — leakage-free), while the three baselines are fully zero-shot with no exposure to this benchmark. Read the margin as *a domain-adapted classifier vs. general-purpose zero-shot safety models*, not as an architecture-independent accuracy claim.
+> **Methodological note.** Niyam-AI's Judge is fitted to Agent-SafetyBench's scenario distribution across CV folds — never to the exact held-out example, so the evaluation is leakage-free, but the model has learned the benchmark's general phrasing conventions. The three baselines are fully zero-shot. Read the margin as *a domain-adapted classifier vs. general-purpose zero-shot safety models*. Out-of-distribution evaluation is open work.
 
-### Statistical significance (McNemar's exact paired test)
+### Statistical significance (McNemar's exact test)
 
-| Baseline | Niyam-AI wins | Baseline wins | Win ratio | p-value |
+| Baseline | Niyam-AI wins | Baseline wins | Ratio | p |
 |---|---|---|---|---|
-| NeMo Guardrails | 387 | 20 | 19.4:1 | < 0.0001 |
-| GPT-OSS-Safeguard-20B | 381 | 19 | 20.1:1 | < 0.0001 |
-| Llama Prompt Guard 2 | 112 | 13 | 8.6:1 | < 0.0001 |
+| NeMo Guardrails | 390 | 22 | 17.7:1 | < 0.0001 |
+| GPT-OSS-Safeguard-20B | 384 | 21 | 18.3:1 | < 0.0001 |
+| Llama Prompt Guard 2 | 114 | 14 | 8.1:1 | < 0.0001 |
 
-All three contingency tables independently reproduce Niyam-AI as correct on **1,957/2,000** scenarios, matching TP+TN above.
+All three contingency tables independently reproduce Niyam-AI as correct on **1,958/2,000** — matching TP+TN above.
 
 ### Component ablation
 
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-xychart-beta
-    title "F1 Score by Pipeline Configuration"
-    x-axis ["Gate Only (rules)", "Gate + Judge", "Gate + Judge + ZK"]
-    y-axis "F1 Score (%)" 0 --> 100
-    bar [74.0, 88.5, 88.5]
-```
-
 | Configuration | Accuracy | Precision | Recall | F1 | FPR | Mean Latency |
 |---|---|---|---|---|---|---|
-| Gate only (scope + static rules, no ML) | 96.1% | 100.0% | 58.7% | 74.0% | 0.0% | 0.10 ms |
-| Gate + Judge (semantic classification) | 97.9% | 89.2% | 87.8% | 88.5% | 1.1% | 0.008 ms |
-| **Full Niyam-AI** (Gate + Judge + ZK proof) | 97.9% | 89.2% | 87.8% | 88.5% | 1.1% | **~1,847 ms** |
+| Gate only (scope + static rules) | 96.1% | 100.0% | 58.7% | 74.0% | 0.0% | 0.089 ms |
+| Gate + Judge | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | 0.002 ms |
+| **Full pipeline** (Gate + Judge + ZK) | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | **1,846.6 ms** |
 
-Adding the zk-SNARK layer changes **no** classification outcome — the proof certifies that the Judge's decision was computed correctly, it does not alter that decision. The full-pipeline mean is below the per-proof cost because proofs are generated only for the ~90.7% of actions that pass the gate.
+Adding the ZK layer changes **no** classification outcome. The proof certifies that the Judge's decision was computed correctly; it does not alter that decision. The full-pipeline mean sits below the per-proof cost because proofs are generated only for the 90.8% of calls that pass the gate.
 
-### Cryptographic proof performance (real EZKL 23.0.5, n=30)
+### Cryptographic proof performance (EZKL 23.0.5, n=30)
 
 | Metric | Measured |
 |---|---|
-| Proof generation | **1,966.7 ± 98.2 ms** (median 1,990.8; p95 2,122.8) |
-| Proof verification | **69.3 ± 9.6 ms** |
+| Proof generation | 1,966.7 ± 98.2 ms (median 1,990.8; p95 2,122.8) |
+| Proof verification | 69.3 ± 9.6 ms |
 | Witness generation | 59.2 ± 12.8 ms |
 | Proof size | 18.68 ± 0.02 KB |
-| Circuit constraints | 431 rows (logrows = 15) |
-| One-time: gen_settings | 35.8 ms |
-| One-time: compile_circuit | 3.1 ms |
-| One-time: gen_srs (local, testing-mode) | 2,015.4 ms |
+| Circuit | 431 constraint rows (logrows = 15) |
+| One-time: SRS generation | 2,015.4 ms |
 | One-time: key setup | 1,507.7 ms |
 
-All 30 proofs verified successfully. Timings are load-sensitive: repeated 5-sample batches under varying system load differed by up to 65%, and a +7.1% thermal drift is visible across the 30-run batch. Read these as an order-of-magnitude feasibility result, not a precise benchmark. Proof size and constraint count are deterministic and did not vary.
+All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default), not Groth16. Timings are load-sensitive — read them as order-of-magnitude feasibility, not a precise benchmark. Proof size and constraint count are deterministic and did not vary.
 
-The SRS was generated locally via EZKL's `gen_srs`, which its documentation designates for testing. Production deployment would use an audited universal SRS from a trusted setup ceremony.
+The SRS is generated locally via `gen_srs`, which EZKL designates for testing. Production deployment would use an audited universal setup.
 
-### Generalization across attack categories
+### Generalization across risk categories
 
 | Risk Category | Correct/Total | Accuracy |
 |---|---|---|
@@ -195,38 +140,29 @@ The SRS was generated locally via EZKL's `gen_srs`, which its documentation desi
 | Spread unsafe information / misinformation | 247/250 | 98.8% |
 | Contribute to harmful / vulnerable code | 247/250 | 98.8% |
 | Lead to physical harm | 247/250 | 98.8% |
-| Violate law or ethics / damage society | 245/250 | 98.0% |
-| Compromise availability | 244/250 | 97.6% |
+| Compromise availability | 246/250 | 98.4% |
+| Violate law or ethics / damage society | 244/250 | 97.6% |
 | Produce unsafe information / misinformation | 230/250 | 92.0%¹ |
 
-¹ Lower because this category is dominated by tool-free content harm (the LLM's own generated text), which a tool-call gate cannot intercept by construction — see [Limitations](#limitations).
+¹ This category is dominated by harm in the LLM's *generated text* rather than in a tool call — outside a tool-call gate's scope by construction. See [Limitations](#limitations).
 
-### Adversarial red-team: can Niyam-AI itself be bypassed?
+### Attacking Niyam-AI itself
 
-We attacked Niyam-AI's own enforcement mechanism across 18 vectors in 6 classes. **Two real implementation bugs were found and fixed.**
-
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-pie title Red-Team Results After Remediation (18 vectors)
-    "Defended" : 18
-    "Vulnerable" : 0
-```
+We attacked the enforcement mechanism, not the agent. 18 vectors, six classes. **Two real vulnerabilities found and fixed.**
 
 | Attack Class | Vectors | Before Fix | After Fix |
 |---|---|---|---|
 | Hash canonicalization | 3 | 3/3 | 3/3 |
-| Judge model evasion (synonym / dilution / homoglyph) | 4 | 4/4 | 4/4 |
+| Judge model evasion (synonym / homoglyph / dilution) | 4 | 4/4 | 4/4 |
 | Control-flow replay | 3 | 1/3 | **3/3** |
 | Schema/payload boundary (NaN, oversized, null-byte) | 1 | 0/1 | **1/1** |
 | Confused-deputy scope injection | 1 | 1/1 | 1/1 |
 | Contract-level manipulation | 6 | 6/6 | 6/6 |
 | **Total** | **18** | **15/18 (83%)** | **18/18 (100%)** |
 
-The six contract-level vectors — wildcard injection, path traversal in tool identifiers, hallucinated privilege keys, allow/forbid collision, empty-allowlist degeneracy, and post-seal privilege escalation — are defended **by architecture, not by added validation**:
+The six contract-level vectors — wildcard injection, path traversal in tool identifiers, hallucinated privilege keys, allow/forbid collision, empty-allowlist degeneracy, post-seal escalation — are defended **by architecture, not added validation**: exact-string tool matching (a contract declaring `["*"]` grants only a tool literally named `*`), fail-closed precedence (forbidden evaluated before allowed), and SHA-256 sealing (post-seal modification produces an immediate hash mismatch).
 
-- **Exact-string tool matching.** Identifiers are compared literally, never as globs or paths. A contract declaring `["*"]` grants access only to a tool literally named `*`.
-- **Fail-closed precedence.** The forbidden list is checked before the allowed list, so collisions resolve to deny; an empty allowlist denies universally.
-- **SHA-256 sealing.** Appending a forbidden tool to a sealed contract produces an immediate hash mismatch on re-verification — a direct empirical confirmation of the paper's soundness theorem in the implemented system, not just in the argument.
+The Judge required no patching to resist synonym substitution, Unicode homoglyphs, zero-width spacing, and dilution attacks — a representation keyed on semantic signals rather than surface n-grams proved more robust to lexical obfuscation than expected.
 
 ---
 
@@ -235,37 +171,33 @@ The six contract-level vectors — wildcard injection, path traversal in tool id
 ```
 niyam-ai/
 ├── core/
-│   └── judge_model.py               # sklearn TF-IDF + LogReg (PRIMARY classifier)
+│   └── judge_model.py            # 11-feature extractor + intent-violation labeler
 ├── schema/
-│   ├── intent_contract.py
-│   ├── intent_seal.py
-│   ├── tool_gate.py                 # allowlist + payload schema validation
-│   ├── control_flow.py              # session-bound sequence enforcement
-│   └── execution_ledger.py          # append-only, hash-chained audit log
+│   ├── intent_contract.py        # Intent Contract definition
+│   ├── intent_seal.py            # SHA-256 sealing + verification
+│   ├── tool_gate.py              # allowlist + payload schema validation
+│   ├── control_flow.py           # session-bound sequence enforcement
+│   └── execution_ledger.py       # append-only, hash-chained audit log
 ├── integrations/
-│   ├── llm_middleware.py            # framework-agnostic interception layer
-│   └── ollama_agent.py              # local-LLM agent (no API keys)
+│   ├── llm_middleware.py         # 5-layer enforcement, proof-gated execution
+│   └── ollama_agent.py           # local-LLM agent (no API keys)
 ├── policy/
 │   ├── guardrails.yaml
 │   └── policy_loader.py
-├── data/agent_safetybench/          # gitignored — fetched, not vendored
+├── ezkl_pipeline/
+│   ├── train_pytorch_judge.py    # trains THE Judge on Agent-SafetyBench
+│   └── run_ezkl_pipeline.py      # settings → compile → setup → prove → verify
 ├── evaluation/
-│   ├── cross_validated_eval.py      # ← canonical source of truth
+│   ├── cross_validated_eval.py   # canonical source of truth
 │   ├── external_baseline_eval.py
-│   ├── build_table_iv.py
 │   ├── ablation_study.py
 │   ├── statistical_variance.py
 │   ├── mcnemar_significance.py
 │   ├── adversarial_redteam.py
-│   ├── predictions/                 # baseline prediction CSVs
-│   └── results/                     # all result JSONs
-├── ezkl_pipeline/
-│   ├── train_pytorch_judge.py       # synthetic-data FFN (ZK timing only)
-│   ├── run_ezkl_pipeline.py
-│   └── artifacts/                   # build outputs (mostly gitignored)
-├── notebooks/                       # Colab notebooks for baseline generation
-├── demo.py
-└── demo_agent.py
+│   └── build_table_iv.py
+├── predictions/                  # baseline prediction CSVs
+├── results/                      # all result JSONs
+└── demo.py
 ```
 
 ---
@@ -282,11 +214,11 @@ session = AgentIntegritySession.from_policy(
 session.register_tool("proceed_transaction", my_payment_function)
 
 result = session.call_tool("proceed_transaction", amount=200, recipient="Alice")
-# Raises IntentViolation if out of scope or flagged by the Judge —
-# the tool function never executes on a blocked call.
+# Raises IntentViolation at whichever layer blocks.
+# On success, a verified proof is written to ezkl_pipeline/session_proofs/.
 ```
 
-Local LLM agent (Ollama, no API keys):
+Local LLM agent, no API keys:
 
 ```bash
 ollama pull llama3.2
@@ -296,53 +228,55 @@ python integrations/ollama_agent.py
 Reproduce every result:
 
 ```bash
-# Canonical result — DEFAULT is 5 folds; do not override --n-folds,
-# every other table depends on the 5-fold out-of-fold predictions.
-python evaluation/cross_validated_eval.py --dataset data/agent_safetybench/released_data.json
-python evaluation/ablation_study.py       --dataset data/agent_safetybench/released_data.json
-python evaluation/statistical_variance.py --dataset data/agent_safetybench/released_data.json
-python evaluation/mcnemar_significance.py --dataset data/agent_safetybench/released_data.json \
-    --nemo-csv evaluation/predictions/nemo_predictions.csv \
-    --promptguard-csv evaluation/predictions/prompt_guard_predictions.csv \
-    --safeguard-csv evaluation/predictions/gpt_oss_safeguard_predictions.csv
-python evaluation/build_table_iv.py
-python evaluation/adversarial_redteam.py
-python ezkl_pipeline/train_pytorch_judge.py
+# 1. Train the Judge and build the ZK circuit
+python ezkl_pipeline/train_pytorch_judge.py --dataset data/agent_safetybench/released_data.json
 python ezkl_pipeline/run_ezkl_pipeline.py
+
+# 2. Evaluate. Do NOT override --n-folds: every table depends on this exact split.
+python evaluation/cross_validated_eval.py   --dataset data/agent_safetybench/released_data.json
+python evaluation/ablation_study.py         --dataset data/agent_safetybench/released_data.json
+python evaluation/statistical_variance.py   --dataset data/agent_safetybench/released_data.json
+python evaluation/mcnemar_significance.py   --dataset data/agent_safetybench/released_data.json \
+    --nemo-csv predictions/nemo_predictions.csv \
+    --promptguard-csv predictions/prompt_guard_predictions.csv \
+    --safeguard-csv predictions/gpt_oss_safeguard_predictions.csv
+python evaluation/adversarial_redteam.py
+python evaluation/build_table_iv.py
 ```
 
 ---
 
 ## Design notes
 
-**The ZK-timing model is trained on synthetic data, on purpose.** Proof generation time is a function of circuit architecture, not of the dataset that trained the weights. Coupling the ZK benchmark to Agent-SafetyBench would create an unnecessary dependency on the same benchmark used for baseline comparison. Classification accuracy claims come from a separate, cross-validated classifier.
+**The Judge operates on 11 hand-crafted features, not raw text.** This is a deliberate constraint. It bounds the circuit to 431 rows and keeps proof generation at ~2 s, at the cost of discarding signal a higher-dimensional representation would retain. A 3,000-feature TF-IDF classifier scores comparably but does not compile to a practical circuit — and a safety decision that cannot be proved is outside this system's threat model regardless of its accuracy.
 
-**Every evaluation script shares one source of truth.** `cross_validated_eval.py` exposes `get_oof_predictions()`, imported by `ablation_study.py`, `statistical_variance.py`, and `mcnemar_significance.py` — one fold split, reused everywhere, so numbers cannot drift across scripts. **Always run with the default 5 folds**; changing `--n-folds` silently desynchronizes the ablation from Tables IV, VI, and VII.
+**One model, three roles.** `train_pytorch_judge.py` produces the weights that `llm_middleware.py` loads at runtime and that `run_ezkl_pipeline.py` compiles into the circuit. `cross_validated_eval.py` imports the same `JudgeFFN` class, so the architecture evaluated is the architecture deployed and proved. They cannot drift apart.
 
-**The gate uses adaptive per-scenario scoping.** A fixed single-domain allowlist causes catastrophic false positives on a multi-domain benchmark. `build_adaptive_gate()` derives the allowed-tool set from each scenario's declared environment.
+**Deployment uses one model; cross-validation estimates its generalization.** The five fold-models exist only to produce leakage-free out-of-fold predictions. The deployed model is trained on the full dataset.
 
-**Results are environment-sensitive at the margin.** `LogisticRegression`'s lbfgs solver converges along slightly different paths depending on the BLAS backend, shifting ~3 of 2,000 scenarios (<0.2%) between library versions. Pin versions via `requirements.txt` to reproduce the exact figures above.
+**Every evaluation script shares one fold split.** `cross_validated_eval.get_oof_predictions()` is imported by the ablation, bootstrap, and McNemar scripts — one split, reused everywhere, so numbers cannot silently diverge across tables.
 
 ---
 
 ## Security fixes from red-teaming
 
-**Schema validation (`schema/tool_gate.py`)** — the original numeric check accepted IEEE-754 NaN/Infinity (which pass a standard JSON-schema `"number"` check silently) and had no string length bound, allowing oversized payloads and embedded null bytes through. Fixed with explicit non-finite rejection and a control-character blacklist — deliberately not an alphanumeric whitelist, so legitimate values like `O'Brien Supplies` are not falsely rejected.
+**Schema validation** (`schema/tool_gate.py`) — the numeric check accepted IEEE-754 NaN/Infinity, which pass a standard JSON-schema `"number"` check silently, and had no string length bound. Fixed with explicit non-finite rejection plus length and control-character constraints. Deliberately a control-character blacklist rather than an alphanumeric whitelist, so legitimate values like `O'Brien Supplies` are not rejected.
 
-**Control-flow session binding (`schema/control_flow.py`)** — the sequence guard had no cryptographic tie to the session's sealed IntentHash, so a freshly instantiated flow object could silently reset sequence-completion state. Fixed by binding each flow instance to its session's IntentHash via a registry that rejects a second instantiation for an already-active session.
+**Control-flow session binding** (`schema/control_flow.py`) — the sequence guard had no cryptographic tie to the sealed IntentHash, so a freshly instantiated flow object could reset sequence state. Fixed by binding each instance to its session's IntentHash through a registry that rejects a second instantiation for an active session.
 
-Both were found and fixed in this research prototype prior to any production use. Run `evaluation/adversarial_redteam.py` to reproduce the verification.
+Both were found and fixed in this research prototype prior to any production use. Run `evaluation/adversarial_redteam.py` to reproduce.
 
 ---
 
 ## Limitations
 
-- **Scope is action integrity, not content moderation.** Niyam-AI verifies *tool calls* — it cannot catch harm expressed purely in generated text with no associated tool call (see the 92.0% category above).
-- **Domain-adaptation scope.** Reported metrics reflect a Judge trained on Agent-SafetyBench's distribution. Generalization to substantially different tool vocabularies has not been independently tested.
-- **Judge model is binary** (safe/unsafe). Real deployments will want graded risk categories.
-- **Single-agent evaluation only.** Multi-agent handoff — how a shared or delegated IntentHash should behave — is unaddressed.
-- **Proof generation (~2.0 s)** suits discrete high-stakes actions, not high-throughput latency-sensitive agents without batching or hardware acceleration.
-- **Local testing-mode SRS.** Production use requires an audited universal SRS from a trusted setup ceremony.
+- **Scope is action integrity, not content moderation.** Niyam-AI verifies tool calls. It cannot catch harm expressed purely in generated text with no associated tool call (see the 92.0% category above).
+- **The proof certifies computational integrity, not correctness.** A Judge that misclassifies produces a valid proof of a wrong answer. What verification eliminates is a host silently skipping enforcement.
+- **Domain adaptation.** Reported accuracy reflects a Judge fitted to Agent-SafetyBench's distribution. Generalization to different tool vocabularies is untested.
+- **Binary verdict.** Production deployments will want graded risk categories.
+- **Single-agent only.** Multi-agent handoff — shared or delegated IntentHash semantics — is unaddressed.
+- **~2 s proof generation** suits discrete high-stakes actions, not high-throughput agents without batching or hardware acceleration.
+- **Testing-mode SRS.** Production requires an audited universal setup.
 
 ---
 
@@ -350,12 +284,16 @@ Both were found and fixed in this research prototype prior to any production use
 
 ```bibtex
 @misc{niyamai2026,
-  title  = {NiyamAI: An Intent-Bound AI Agent with Cryptographically
-            Verifiable Guardrails using Zero-Knowledge Proofs},
-  author = {Aditya K and Karkele Om and Mandhane Kartik
-            and More Manisha and Kashid, Yash},
+  title  = {Niyam-AI: Cryptographically Verifiable Guardrails
+            for Autonomous LLM Agents},
+  author = {Katkar, Aditya and Karkele, Om and Mandhane, Kartik
+            and More, Manisha and Kashid, Yash},
   year   = {2026},
   note   = {Department of Computer Engineering, Vishwakarma Institute
-            of Technology, Pune, Maharashtra, India}
+            of Technology, Pune, India}
 }
 ```
+
+## License
+
+MIT. Agent-SafetyBench (thu-coai, 2024) retains its own license.
