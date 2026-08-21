@@ -218,13 +218,6 @@ result = session.call_tool("proceed_transaction", amount=200, recipient="Alice")
 # On success, a verified proof is written to ezkl_pipeline/session_proofs/.
 ```
 
-Local LLM agent, no API keys:
-
-```bash
-ollama pull llama3.2
-python integrations/ollama_agent.py
-```
-
 Reproduce every result:
 
 ```bash
