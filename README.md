@@ -228,11 +228,17 @@ python integrations/ollama_agent.py
 Reproduce every result:
 
 ```bash
-# 1. Train the Judge and build the ZK circuit
+
+# 1. Fetch the dataset (not vendored — respects Agent-SafetyBench's license)
+git clone --depth=1 https://github.com/thu-coai/Agent-SafetyBench.git /tmp/asb
+mkdir -p data/agent_safetybench && cp /tmp/asb/data/released_data.json data/agent_safetybench/
+
+# 2. Train the Judge and build the ZK circuit
 python ezkl_pipeline/train_pytorch_judge.py --dataset data/agent_safetybench/released_data.json
 python ezkl_pipeline/run_ezkl_pipeline.py
 
-# 2. Evaluate. Do NOT override --n-folds: every table depends on this exact split.
+
+# 3. Evaluate. Do NOT override --n-folds: every table depends on this exact split.
 python evaluation/cross_validated_eval.py   --dataset data/agent_safetybench/released_data.json
 python evaluation/ablation_study.py         --dataset data/agent_safetybench/released_data.json
 python evaluation/statistical_variance.py   --dataset data/agent_safetybench/released_data.json
