@@ -156,7 +156,7 @@ class ProvableJudge:
         return decision, float(probs[decision].item())
 class ZKProver:
     """
-    Groth16 proof that the Judge's forward pass on THIS feature vector
+    Halo2-KZG proof that the Judge's forward pass on THIS feature vector
     produced THIS decision, verified before the tool may run.
 
     Requires one-time setup artifacts from ezkl_pipeline/run_ezkl_pipeline.py.
@@ -185,7 +185,7 @@ class ZKProver:
                 f"Run: python ezkl_pipeline/run_ezkl_pipeline.py"
             )
         self._ezkl = ezkl
-        logger.info("  ZK layer ready (Groth16 via EZKL)")
+        logger.info("  ZK layer ready (Halo2-KZG via EZKL)")
 
     def prove_and_verify(self, feats: list, witness_path: Path,
                          proof_path: Path) -> tuple:
@@ -278,7 +278,7 @@ class AgentIntegritySession:
         )
 
         flow = ControlFlowIntegrity(
-            allowed_sequence=policy["allowed_tools"],
+            allowed_sequence=policy.get("flow") or policy["allowed_tools"],
             intent_hash=sealed.hash,
         )
 
@@ -368,7 +368,7 @@ class AgentIntegritySession:
 
     def print_ledger(self) -> None:
         print("  EXECUTION LEDGER - tamper-evident audit trail")
-        for i, entry in enumerate(self.ledger.chain):
+        for i, entry in enumerate(self.ledger.ledge):
             print(f"\n  [{i}] {entry['status']}")
             print(f"       tool   : {entry['tool']}")
             print(f"       reason : {entry['reason']}")
@@ -382,7 +382,7 @@ class AgentIntegritySession:
             "agent": self.contract.agent_name,
             "task": self.contract.user_task,
             "intent_hash": self.intent_hash,
-            "total_calls": len(self.ledger.chain),
+            "total_calls": len(self.ledger.ledge),
             "violations": len(self.ledger.get_violations()),
             "chain_valid": self.ledger.verify(),
             "zk_enabled": self.prover.enabled,
