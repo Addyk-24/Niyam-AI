@@ -204,6 +204,22 @@ niyam-ai/
 
 ## Quickstart
 
+### Install
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the demo (30 seconds)
+
+```bash
+python demo.py --no-zk
+```
+
+Exercises all enforcement layers against five scenarios — one legitimate call and four attacks — and prints which layer caught each, followed by the hash-chained execution ledger. Drop `--no-zk` once the circuit is built (below) to see real proofs generated and verified per approved action.
+
+### Use it in your own agent
+
 ```python
 from integrations.llm_middleware import AgentIntegritySession
 
@@ -214,24 +230,27 @@ session = AgentIntegritySession.from_policy(
 session.register_tool("proceed_transaction", my_payment_function)
 
 result = session.call_tool("proceed_transaction", amount=200, recipient="Alice")
-# Raises IntentViolation at whichever layer blocks.
+# Raises IntentViolation at whichever layer blocks; e.layer names it.
 # On success, a verified proof is written to ezkl_pipeline/session_proofs/.
 ```
 
-Reproduce every result:
+Framework-agnostic — no LangChain, no specific LLM, no API keys required.
+
+### Reproduce every result
 
 ```bash
-
-# 1. Fetch the dataset (not vendored — respects Agent-SafetyBench's license)
+# 1. Fetch the dataset (not vendored - respects Agent-SafetyBench's license)
 git clone --depth=1 https://github.com/thu-coai/Agent-SafetyBench.git /tmp/asb
-mkdir -p data/agent_safetybench && cp /tmp/asb/data/released_data.json data/agent_safetybench/
+mkdir -p data/agent_safetybench
+cp /tmp/asb/data/released_data.json data/agent_safetybench/
 
 # 2. Train the Judge and build the ZK circuit
 python ezkl_pipeline/train_pytorch_judge.py --dataset data/agent_safetybench/released_data.json
 python ezkl_pipeline/run_ezkl_pipeline.py
 
-
-# 3. Evaluate. Do NOT override --n-folds: every table depends on this exact split.
+# 3. Evaluate.
+#    Do NOT override --n-folds: Tables IV, V, VI, VII and VIII all consume
+#    out-of-fold predictions from this exact split via a shared function.
 python evaluation/cross_validated_eval.py   --dataset data/agent_safetybench/released_data.json
 python evaluation/ablation_study.py         --dataset data/agent_safetybench/released_data.json
 python evaluation/statistical_variance.py   --dataset data/agent_safetybench/released_data.json
@@ -243,8 +262,21 @@ python evaluation/adversarial_redteam.py
 python evaluation/build_table_iv.py
 ```
 
----
+Results are written to `results/`. Step 2 takes about 20 seconds; step 3 about two minutes.
 
+### Verify a proof yourself
+
+Proof verification needs only the verification key, the circuit settings, and the proof — no model weights, no trust in the machine that produced it:
+
+```python
+import ezkl
+ok = ezkl.verify(
+    "ezkl_pipeline/session_proofs/proof_<id>.json",
+    "ezkl_pipeline/settings.json",
+    "ezkl_pipeline/vk.key",
+    srs_path="ezkl_pipeline/kzg.srs",
+)
+```
 ## Design notes
 
 **The Judge operates on 11 hand-crafted features, not raw text.** This is a deliberate constraint. It bounds the circuit to 431 rows and keeps proof generation at ~2 s, at the cost of discarding signal a higher-dimensional representation would retain. A 3,000-feature TF-IDF classifier scores comparably but does not compile to a practical circuit — and a safety decision that cannot be proved is outside this system's threat model regardless of its accuracy.
