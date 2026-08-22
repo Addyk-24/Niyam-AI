@@ -5,7 +5,7 @@ from typing import Literal
 
 class ExecutionLedger:
     def __init__(self):
-        self.ledge: list[str] = []
+        self.ledge: list[dict] = []
 
     def add_entry(
         self,
@@ -43,25 +43,24 @@ class ExecutionLedger:
         Useful for tamper-detection in audits.
         """
 
-        for i,entry in enumerate(self.ledge):
-
-            store_hash = entry.pop("entry_hash")
-
-            recomputed = hashlib.sha256(
-                json.dumps(entry,sort_keys=True).encode()
-                ).hexdigest()
+        for i, entry in enumerate(self.ledge):
+                
+            candidate = {k: v for k, v in entry.items() if k != "entry_hash"}
             
-            entry["entry_hash"] = store_hash
+            recomputed = hashlib.sha256(
+                json.dumps(candidate, sort_keys=True).encode()
+            ).hexdigest()
 
-            if store_hash != recomputed:
+            if entry["entry_hash"] != recomputed:
+            
                 return False
             
-            if i>0:
-                expected_prev = self.ledge[i-1]["entry_hash"]
-                if entry["previous_hash"] != expected_prev:
-                    return False
+            if i > 0 and entry["previous_hash"] != self.ledge[i-1]["entry_hash"]:
 
+                return False
+            
         return True
+
     
     def get_violations(self) -> list[dict]:
         """Return only BLOCKED entries — useful for the trust dashboard."""

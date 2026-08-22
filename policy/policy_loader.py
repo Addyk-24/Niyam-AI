@@ -14,7 +14,7 @@ class PolicyLoader:
 
         # Normalize to a consistent shape downstream code can rely on
         return {
-            "agent": raw.get("agent", "unknown"),
+            "agent_name": raw.get("agent", "Fin-gent"),
             "allowed_tools": raw.get("allow", []),
             "forbidden_tools": raw.get("deny", []),
             "flow": raw.get("flow", []),
