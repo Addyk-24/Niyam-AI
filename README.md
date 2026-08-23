@@ -109,9 +109,9 @@ All three contingency tables independently reproduce Niyam-AI as correct on **1,
 
 | Configuration | Accuracy | Precision | Recall | F1 | FPR | Mean Latency |
 |---|---|---|---|---|---|---|
-| Gate only (scope + static rules) | 96.1% | 100.0% | 58.7% | 74.0% | 0.0% | 0.089 ms |
+| Gate only (scope + static rules) | 96.1% | 100.0% | 58.7% | 74.0% | 0.0% | 0.108 ms |
 | Gate + Judge | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | 0.002 ms |
-| **Full pipeline** (Gate + Judge + ZK) | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | **1,846.6 ms** |
+| **Full pipeline** (Gate + Judge + ZK) | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | **1,582.8 ms** |
 
 Adding the ZK layer changes **no** classification outcome. The proof certifies that the Judge's decision was computed correctly; it does not alter that decision. The full-pipeline mean sits below the per-proof cost because proofs are generated only for the 90.8% of calls that pass the gate.
 
@@ -119,13 +119,13 @@ Adding the ZK layer changes **no** classification outcome. The proof certifies t
 
 | Metric | Measured |
 |---|---|
-| Proof generation | 1,966.7 ± 98.2 ms (median 1,990.8; p95 2,122.8) |
-| Proof verification | 69.3 ± 9.6 ms |
-| Witness generation | 59.2 ± 12.8 ms |
-| Proof size | 18.68 ± 0.02 KB |
+| Proof generation | 1,694.5 ± 92.0 ms (median 1722.04; p95 1688.96) |
+| Proof verification | 50.7 ± 7.5 ms |
+| Witness generation | 27.6 ± 5.9 ms |
+| Proof size | 18.64 ± 0.04 KB |
 | Circuit | 431 constraint rows (logrows = 15) |
-| One-time: SRS generation | 2,015.4 ms |
-| One-time: key setup | 1,507.7 ms |
+| One-time: SRS generation | 2174.5 ms |
+| One-time: key setup | 1354.7 ms |
 
 All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default), not Groth16. Timings are load-sensitive — read them as order-of-magnitude feasibility, not a precise benchmark. Proof size and constraint count are deterministic and did not vary.
 
