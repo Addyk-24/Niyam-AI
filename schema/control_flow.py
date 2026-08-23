@@ -1,4 +1,7 @@
-import hashlib
+"""
+session-bound sequence enforcement.
+"""
+
 import time
 
 
@@ -7,22 +10,6 @@ class ControlFlowViolation(Exception):
 
 
 class ControlFlowIntegrity:
-    """
-    SECURITY FIX (red-team finding): the original design
-    allowed any caller to instantiate a fresh ControlFlowIntegrity object
-    and silently reset sequence-progress state, because the object had no
-    binding to the session's sealed IntentHash. An attacker (or buggy
-    calling code) could bypass "already completed" sequence protection by
-    simply constructing a new flow instance mid-session.
-
-    Fix: every ControlFlowIntegrity instance is now bound to the session's
-    IntentHash at construction. A process-wide registry tracks which
-    IntentHash values have already had a flow instance created; a second
-    attempt to create a NEW flow object for an IntentHash that already has
-    one raises ControlFlowViolation instead of silently succeeding. This
-    closes the gap without requiring every caller to manually enforce
-    one-flow-per-session discipline.
-    """
 
     # Process-wide registry: intent_hash -> creation timestamp.
     _active_sessions: dict[str, float] = {}
@@ -37,20 +24,19 @@ class ControlFlowIntegrity:
             if intent_hash in ControlFlowIntegrity._active_sessions and not allow_rebind:
                 raise ControlFlowViolation(
                     f"A ControlFlowIntegrity instance already exists for "
-                    f"IntentHash {intent_hash[:16]}... — refusing to create "
-                    f"a second one, which would silently reset sequence "
-                    f"progress for an active session. If this is intentional "
-                    f"(e.g. session explicitly ended and restarted), pass "
-                    f"allow_rebind=True."
+                    f"IntentHash {intent_hash[:16]}... - refusing to create a "
+                    f"second one, which would silently reset sequence progress "
+                    f"for an active session. Call end_session() when the "
+                    f"session terminates, or pass allow_rebind=True if the "
+                    f"reset is intentional."
                 )
             ControlFlowIntegrity._active_sessions[intent_hash] = time.time()
 
     def validate_step(self, action: str) -> bool:
         if self.current_index >= len(self.allowed_sequence):
-            raise ControlFlowViolation("No further actions allowed — sequence exhausted.")
+            raise ControlFlowViolation("No further actions allowed - sequence exhausted.")
 
         expected = self.allowed_sequence[self.current_index]
-
         if action != expected:
             raise ControlFlowViolation(
                 f"Step {self.current_index}: expected '{expected}' but got '{action}'"
@@ -59,19 +45,24 @@ class ControlFlowIntegrity:
         self.current_index += 1
         return True
 
-    def reset(self, allow_rebind: bool = False):
+    def end_session(self) -> None:
         """
-        Allow reuse of the same flow for a new session.
-        Explicit allow_rebind required if this instance is bound to an
-        IntentHash — resetting a BOUND flow without acknowledging it is
-        the exact silent-reset pattern the red-team finding identified.
+        Release this session's IntentHash from the registry
+        """
+        if self.intent_hash:
+            ControlFlowIntegrity._active_sessions.pop(self.intent_hash, None)
+
+    def reset(self, allow_rebind: bool = False) -> None:
+        """
+        Reset sequence progress for reuse.\
+        Explicit allow_rebind is required when this instance is bound to an
+        IntentHash
         """
         if self.intent_hash is not None and not allow_rebind:
             raise ControlFlowViolation(
                 "Cannot reset a session-bound flow without allow_rebind=True. "
-                "This is intentional — silent resets of a sealed session's "
-                "control flow are exactly the vulnerability this binding "
-                "closes."
+                "This is intentional - silent resets of a sealed session's "
+                "control flow are the vulnerability this binding closes."
             )
         self.current_index = 0
 
@@ -79,7 +70,9 @@ class ControlFlowIntegrity:
         return self.current_index >= len(self.allowed_sequence)
 
     @classmethod
-    def clear_session_registry(cls):
-        """Testing/teardown helper only — never call in production code
-        paths, as it defeats the entire binding mechanism."""
+    def clear_session_registry(cls) -> None:
+        """
+        Testing and teardown only. Never call from a production path: it
+        releases every active binding at once and defeats the mechanism.
+        """
         cls._active_sessions.clear()

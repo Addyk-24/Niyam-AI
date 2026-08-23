@@ -37,13 +37,19 @@ import torch
 import torch.nn as nn
 import ezkl
 
-from benchmark_eval.judge_model import extract_features, JudgeInput
+from core.judge_model import extract_features, JudgeInput
 from policy.policy_loader import PolicyLoader
 from schema.control_flow import ControlFlowIntegrity, ControlFlowViolation
 from schema.execution_ledger import ExecutionLedger
 from schema.intent_contract import IntentContract
 from schema.intent_seal import HashIntentContract, IntentSeal
 from schema.tool_gate import ToolAuthorizationError, ToolAuthorityGate
+
+import platform
+
+if platform.system() == "Windows" and "HOME" not in os.environ:
+    os.environ["HOME"] = os.environ.get("USERPROFILE", os.path.expanduser("~"))
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +59,8 @@ logging.basicConfig(
 logger = logging.getLogger("niyam.middleware")
 
 HERE = Path(__file__).resolve().parent.parent
-EZKL_DIR = HERE / "ezkl_pipeline"
+EZKL_DIR = HERE / "ezkl_pipeline" / "artifacts"
+
 
 class IntentViolation(Exception):
     """Raised when a tool call fails any enforcement layer."""
@@ -311,7 +318,8 @@ class AgentIntegritySession:
         try:
             self.gate.authorize(tool_name, payload)
         except (ToolAuthorizationError, jsonschema.ValidationError) as e:
-            self._block(tool_name, str(e), "allowlist")
+            msg = str(e).split("\n")[0]
+            self._block(tool_name, msg, "allowlist")
 
         try:
             PayloadInspector.inspect_payload(tool_name, payload)
@@ -376,6 +384,10 @@ class AgentIntegritySession:
             print(f"       hash   : {entry['entry_hash'][:24]}...")
         print(f"\n  Chain integrity : {'VALID' if self.ledger.verify() else 'TAMPERED'}")
         print(f"  Violations      : {len(self.ledger.get_violations())}")
+
+    def end_session(self) -> None:
+        """Release the session's IntentHash binding."""
+        self.flow.end_session()
 
     def session_summary(self) -> dict:
         return {

@@ -1,81 +1,81 @@
 {
   "n_runs": 30,
   "proof_generation_ms": {
-    "mean": 2201.5,
-    "std": 427.5
+    "mean": 1694.48,
+    "std": 91.99
   },
   "proof_generation_distribution": {
-    "mean": 2201.5,
-    "std": 427.5,
-    "min": 1246.2,
-    "p25": 2037.6,
-    "median": 2222.47,
-    "p75": 2511.77,
-    "p95": 2694.53,
-    "max": 2742.59,
-    "first_5_mean": 1404.51
+    "mean": 1694.48,
+    "std": 91.99,
+    "min": 1480.23,
+    "p25": 1688.96,
+    "median": 1722.04,
+    "p75": 1746.37,
+    "p95": 1791.54,
+    "max": 1800.96,
+    "first_5_mean": 1515.27
   },
   "proof_verification_distribution": {
-    "mean": 70.55,
-    "std": 25.42,
-    "min": 30.73,
-    "p25": 53.21,
-    "median": 66.2,
-    "p75": 88.36,
-    "p95": 112.04,
-    "max": 139.4,
-    "first_5_mean": 38.7
+    "mean": 50.66,
+    "std": 7.54,
+    "min": 37.57,
+    "p25": 45.08,
+    "median": 50.18,
+    "p75": 53.06,
+    "p95": 65.98,
+    "max": 72.22,
+    "first_5_mean": 41.31
   },
   "raw_prove_times_ms": [
-    1291.67,
-    1270.85,
-    1246.2,
-    1326.77,
-    1887.07,
-    2102.8,
-    2204.09,
-    2204.07,
-    2207.66,
-    2032.98,
-    2202.7,
-    2237.27,
-    2639.68,
-    2609.26,
-    2405.95,
-    2025.58,
-    1953.8,
-    2187.37,
-    2678.73,
-    2707.45,
-    2523.54,
-    2588.52,
-    2593.0,
-    2431.06,
-    2471.56,
-    2476.47,
-    2457.79,
-    2287.16,
-    2051.45,
-    2742.59
+    1559.36,
+    1533.32,
+    1508.58,
+    1519.41,
+    1534.82,
+    1786.06,
+    1731.95,
+    1734.82,
+    1721.55,
+    1710.17,
+    1733.48,
+    1732.54,
+    1695.06,
+    1721.37,
+    1733.59,
+    1703.18,
+    1781.07,
+    1682.15,
+    1718.02,
+    1722.53,
+    1775.42,
+    1697.46,
+    1750.21,
+    1686.93,
+    1767.04,
+    1788.31,
+    1480.23,
+    1730.55,
+    1794.18,
+    1800.96
   ],
   "proof_verification_ms": {
-    "mean": 70.55,
-    "std": 25.42
+    "mean": 50.66,
+    "std": 7.54
   },
   "witness_generation_ms": {
-    "mean": 18.85,
-    "std": 7.81
+    "mean": 27.55,
+    "std": 5.92
   },
   "proof_size_kb": {
     "mean": 18.64,
-    "std": 0.03
+    "std": 0.04
   },
   "circuit_logrows": 15,
   "one_time_setup_ms": {
-    "gen_settings": 54.9,
-    "compile_circuit": 3.8,
-    "gen_srs_local_mode": 1542.6,
-    "setup_keys": 1141.1
+    "gen_settings": 10.4,
+    "compile_circuit": 1.7,
+    "gen_srs_local_mode": 2174.5,
+    "setup_keys": 1354.7
   },
   "note": "REAL measured values from actual EZKL 23.0.5 pipeline run on a trained PyTorch FFN Judge model (11-dim input, 8-unit hidden layer), NOT simulated with random.gauss()."
 }

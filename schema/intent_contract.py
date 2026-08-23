@@ -1,10 +1,15 @@
+"""
+the object an agent's permissions are bound to.
 
-# Code → Build → Test → Agent Integrity Gate → Deploy
+One contract per session. Hashed once at initialization by IntentSeal; the
+resulting IntentHash is the commitment every downstream layer checks against.
+"""
 
 import hashlib
-from pydantic import BaseModel
-from typing import List,Optional
 import json
+from typing import List
+
+from pydantic import BaseModel
 
 
 class IntentContract(BaseModel):
@@ -13,30 +18,18 @@ class IntentContract(BaseModel):
     allowed_tools: List[str]
     forbidden_tools: List[str]
 
+    def intent_hash(self) -> str:
+        """
+        Deterministic SHA-256 over the canonicalized full contract.
 
-    def intent_hash(self):
-        """Deterministic hash of the full contract dict."""
-
+        Canonicalization is json.dumps(..., sort_keys=True) over the complete
+        model dump, so key ordering cannot produce two hashes for the same
+        contract.
+        """
         try:
             data = self.model_dump()
         except AttributeError:
             data = self.dict()
 
         normalized = json.dumps(data, sort_keys=True)
-
         return hashlib.sha256(normalized.encode()).hexdigest()
-
-    def seal(self) -> str:
-        """
-        Create immutable hash of the intent 
-        
-        """
-        content = (
-            self.user_task
-            + ''.join(sorted(self.allowed_tools))
-            + ''.join(sorted(self.forbidden_tools))
-        )
-
-        return hashlib.sha256(content.encode()).hexdigest()
-    
-    

@@ -12,8 +12,8 @@
       "recall": 58.7,
       "f1": 74.0,
       "fpr": 0.0,
-      "latency_mean_ms": 0.0891,
-      "latency_std_ms": 0.1928
+      "latency_mean_ms": 0.1076,
+      "latency_std_ms": 0.2363
     },
     {
       "config": "Gate + Judge (adaptive, out-of-fold)",
@@ -27,8 +27,8 @@
       "recall": 87.8,
       "f1": 88.8,
       "fpr": 1.0,
-      "latency_mean_ms": 0.0017,
-      "latency_std_ms": 0.0011
+      "latency_mean_ms": 0.002,
+      "latency_std_ms": 0.0016
     },
     {
       "config": "Gate + Judge + ZK (Full Niyam-AI)",
@@ -42,8 +42,8 @@
       "recall": 87.8,
       "f1": 88.8,
       "fpr": 1.0,
-      "latency_mean_ms": 1846.6078,
-      "latency_std_ms": 596.9456
+      "latency_mean_ms": 1582.7716,
+      "latency_std_ms": 512.8643
     }
   ]
 }
