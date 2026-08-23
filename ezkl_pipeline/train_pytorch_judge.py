@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import confusion_matrix
 
-from benchmark_eval.judge_model import extract_features, JudgeInput, label_intent_violation
+from core.judge_model import extract_features, JudgeInput, label_intent_violation
 
 HERE = Path(__file__).resolve().parent
 

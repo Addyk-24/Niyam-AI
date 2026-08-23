@@ -104,7 +104,7 @@
       "attack_class": "contract_manip",
       "name": "Post-seal privilege escalation goes undetected",
       "attack_succeeded": false,
-      "detail": "Appending a forbidden tool to a sealed contract produces an immediate SHA-256 hash mismatch on re-verification. This is a direct empirical confirmation of Theorem 1's collision-resistance assumption in the implemented system, not merely in the argument"
+      "detail": "Appending a forbidden tool to a sealed contract produces an immediate SHA-256 mismatch on re-verification, confirming the seal-and-verify mechanism is correctly wired. This tests implementation correctness, not the collision-resistance assumption itself, which is inherited from SHA-256 and cannot be established empirically."
     },
     {
       "attack_class": "contract_manip",

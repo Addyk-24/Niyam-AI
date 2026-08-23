@@ -118,6 +118,8 @@ def main():
     for k, v in summary.items():
         print(f"    {k:<14}: {v}")
 
+    session.end_session()
+
     if not args.no_zk:
         print("\n  Proofs for allowed actions were written to "
               "ezkl_pipeline/session_proofs/")

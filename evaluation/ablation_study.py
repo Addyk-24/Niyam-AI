@@ -182,8 +182,8 @@ def eval_gate_judge(data: list, oof: dict) -> dict:
 #  Configuration C: Gate + Judge + ZK (full Niyam-AI) :
 
 def eval_full_niyam(data: list, oof: dict,
-                    zk_proof_ms: float = 1966.67, zk_proof_std: float = 98.18,
-                    zk_verify_ms: float = 69.33, zk_verify_std: float = 9.63) -> dict:
+                    zk_proof_ms: float = 1694.5, zk_proof_std: float = 92.0,
+                    zk_verify_ms: float = 50.7, zk_verify_std: float = 7.5) -> dict:
     """
     Full pipeline. Classification identical to Config B (ZK proves the
     Judge's decision was computed correctly — it does not change what

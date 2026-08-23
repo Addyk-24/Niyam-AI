@@ -373,12 +373,13 @@ def attack_contract_manipulation():
     tampering_undetected = sealer.verify_seal(sealed)
     record("contract_manip", "Post-seal privilege escalation goes undetected",
            succeeded=tampering_undetected,
-           detail=("Contract widened after sealing without hash mismatch -- "
-                   "Theorem 1 violated" if tampering_undetected else
-                   "Appending a forbidden tool to a sealed contract produces an "
-                   "immediate SHA-256 hash mismatch on re-verification. This is a "
-                   "direct empirical confirmation of Theorem 1's collision-resistance "
-                   "assumption in the implemented system, not merely in the argument"))
+           detail=("Appending a forbidden tool to a sealed contract produces an "
+                    "immediate SHA-256 mismatch on re-verification, confirming the "
+                    "seal-and-verify mechanism is correctly wired. This tests "
+                    "implementation correctness, not the collision-resistance "
+                    "assumption itself, which is inherited from SHA-256 and cannot "
+                    "be established empirically."
+                    ))
 
     c = IntentContract(agent_name="finance_agent", user_task="pay",
                        allowed_tools=[], forbidden_tools=[])
@@ -395,9 +396,11 @@ def attack_contract_manipulation():
                    "defaulting open -- the degenerate case fails closed"))
 
 
-def run_redteam(judge_path: str = "core/judge_model.pkl"):
+def run_redteam():
     judge = JudgeFFN()
-    judge.load_state_dict(torch.load("ezkl_pipeline/artifacts/judge_ffn.pt", map_location="cpu"))
+    HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    WEIGHTS = os.path.join(HERE, "ezkl_pipeline", "artifacts", "judge_ffn.pt")
+    judge.load_state_dict(torch.load(WEIGHTS, map_location="cpu"))
     judge.eval()
     
     print("="*72)
