@@ -4,7 +4,7 @@
 
 Every existing agent guardrail — system prompts, output filters, policy engines — runs on the same machine an attacker is trying to compromise. If the check is bypassed, nothing records that it should have run. A compromised host produces no evidence of its own failure.
 
-Niyam-AI replaces that trust with proof. Each safety decision produces a zk-SNARK that any third party can verify in ~70 ms, without access to the model's weights or trust in the machine that ran it.
+Niyam-AI replaces that trust with proof. Each safety decision produces a zk-SNARK that any third party can verify in ~51 ms, without access to the model's weights or trust in the machine that ran it.
 
 ```
 LLM Agent  →  Gate  →  Judge  →  zk-SNARK proof  →  Tool executes
@@ -306,7 +306,7 @@ Both were found and fixed in this research prototype prior to any production use
 - **Domain adaptation.** Reported accuracy reflects a Judge fitted to Agent-SafetyBench's distribution. Generalization to different tool vocabularies is untested.
 - **Binary verdict.** Production deployments will want graded risk categories.
 - **Single-agent only.** Multi-agent handoff — shared or delegated IntentHash semantics — is unaddressed.
-- **~2 s proof generation** suits discrete high-stakes actions, not high-throughput agents without batching or hardware acceleration.
+- **~1.7 seconds proof generation** suits discrete high-stakes actions, not high-throughput agents without batching or hardware acceleration.
 - **Testing-mode SRS.** Production requires an audited universal setup.
 
 ---
