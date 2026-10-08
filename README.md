@@ -4,7 +4,7 @@
 
 Every existing agent guardrail — system prompts, output filters, policy engines — runs on the same machine an attacker is trying to compromise. If the check is bypassed, nothing records that it should have run. A compromised host produces no evidence of its own failure.
 
-Niyam-AI replaces that trust with proof. Each safety decision produces a zk-SNARK that any third party can verify in ~51 ms, without access to the model's weights or trust in the machine that ran it.
+Niyam-AI attaches a proof to each safety decision. Every approved tool call carries a zk-SNARK of the Judge's computation that any third party can verify in ~51 ms, without access to the model's weights. What that proof does and does not cover is stated precisely in [Known gap](#known-gap-the-proof-and-the-decision-are-separate-computations): in the current version the gate acts on the Judge's PyTorch output, and nothing yet checks that it matches the proven output.
 
 ```
 LLM Agent  →  Gate  →  Judge  →  zk-SNARK proof  →  Tool executes
@@ -54,7 +54,7 @@ flowchart TB
     style Seal fill:#d84,color:#fff
 ```
 
-**One model does everything.** The 11→8→2 feedforward Judge makes the safety decision, produces the accuracy reported below, and is the model committed to in the ZK circuit. The proof attests to the decision that was actually made — not to a separate demonstration model.
+**One architecture, one set of deployed weights.** The 11→8→2 feedforward Judge is the model evaluated below (via 5-fold cross-validation of this architecture), the model loaded at runtime, and the model compiled into the ZK circuit. Earlier versions used a separate synthetic-weight network for proofs, so no proof attested to a reported decision; that split has been removed. One split remains at runtime and is documented under [Known gap](#known-gap-the-proof-and-the-decision-are-separate-computations).
 
 ---
 
@@ -71,7 +71,7 @@ flowchart TB
 | False Positives (safe incorrectly blocked) | 19 |
 | False Negatives (unsafe incorrectly permitted) | 23 |
 
-Every metric below derives from these four counts.
+Every metric below derives from these four counts: **166 of 189 violations caught, 19 false positives out of 1,811 safe cases.** The classes are imbalanced (about 9.6 : 1), so a classifier that always answers "safe" would already score 90.6% accuracy; read recall and FPR, not accuracy alone.
 
 ### vs. deployed guardrail systems
 
@@ -111,23 +111,25 @@ All three contingency tables independently reproduce Niyam-AI as correct on **1,
 |---|---|---|---|---|---|---|
 | Gate only (scope + static rules) | 96.1% | 100.0% | 58.7% | 74.0% | 0.0% | 0.108 ms |
 | Gate + Judge | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | 0.002 ms |
-| **Full pipeline** (Gate + Judge + ZK) | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | **1,582.8 ms** |
+| **Full pipeline** (Gate + Judge + ZK) | 97.9% | 89.7% | 87.8% | 88.8% | 1.0% | **1,582.8 ms**² |
 
-Adding the ZK layer changes **no** classification outcome. The proof certifies that the Judge's decision was computed correctly; it does not alter that decision. The full-pipeline mean sits below the per-proof cost because proofs are generated only for the 90.8% of calls that pass the gate.
+Adding the ZK layer changes **no** classification outcome. The proof certifies that the circuit's computation was performed correctly; it does not alter the decision.
+
+² The ZK latency in this row is **modelled, not measured end-to-end**: the ablation script adds the separately measured proof and verification times (1,694.5 + 50.7 ms, see below) for each approved call, and averages over all 2,000 scenarios. The 185 blocked scenarios never reach the prover and count as 0 ms, which is why the mean sits below the per-proof cost (1,815 of 2,000 calls, 90.8%, are proved). A fully measured end-to-end ablation is in progress.
 
 ### Cryptographic proof performance (EZKL 23.0.5, n=30)
 
 | Metric | Measured |
 |---|---|
-| Proof generation | 1,694.5 ± 92.0 ms (median 1722.04; p95 1688.96) |
+| Proof generation | 1,694.5 ± 92.0 ms (median 1,722.04; p95 1,791.54) |
 | Proof verification | 50.7 ± 7.5 ms |
 | Witness generation | 27.6 ± 5.9 ms |
 | Proof size | 18.64 ± 0.04 KB |
 | Circuit | 431 constraint rows (logrows = 15) |
-| One-time: SRS generation | 2174.5 ms |
-| One-time: key setup | 1354.7 ms |
+| One-time: SRS generation | 2,174.5 ms |
+| One-time: key setup | 1,354.7 ms |
 
-All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default), not Groth16. Timings are load-sensitive — read them as order-of-magnitude feasibility, not a precise benchmark. Proof size and constraint count are deterministic and did not vary.
+All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default), not Groth16. Mean, median and percentiles are computed from the 30 raw proof times stored in `ezkl_pipeline/artifacts/ezkl_real_results.json`. Timings are load-sensitive — CPU-bound proving on a laptop slows as the CPU throttles — so read them as order-of-magnitude feasibility, not a precise benchmark. The constraint count is fixed by the circuit; proof size varies slightly between runs (± 0.04 KB).
 
 The SRS is generated locally via `gen_srs`, which EZKL designates for testing. Production deployment would use an audited universal setup.
 
@@ -154,15 +156,34 @@ We attacked the enforcement mechanism, not the agent. 18 vectors, six classes. *
 |---|---|---|---|
 | Hash canonicalization | 3 | 3/3 | 3/3 |
 | Judge model evasion (synonym / homoglyph / dilution) | 4 | 4/4 | 4/4 |
-| Control-flow replay | 3 | 1/3 | **3/3** |
+| Control-flow replay | 3 | 2/3 | **3/3** |
 | Schema/payload boundary (NaN, oversized, null-byte) | 1 | 0/1 | **1/1** |
 | Confused-deputy scope injection | 1 | 1/1 | 1/1 |
 | Contract-level manipulation | 6 | 6/6 | 6/6 |
-| **Total** | **18** | **15/18 (83%)** | **18/18 (100%)** |
+| **Total** | **18** | **16/18 (89%)** | **18/18 (100%)** |
+
+The two "before fix" failures were reproduced by running the current suite's vectors against the code from just before each fix (`d3a5cc0`, `3007441`): a fresh control-flow object for the same session replayed a completed payment, and the payload schema accepted NaN, a 1 MB string and a null byte. Replaying on the *same* flow object was already blocked before the fix.
 
 The six contract-level vectors — wildcard injection, path traversal in tool identifiers, hallucinated privilege keys, allow/forbid collision, empty-allowlist degeneracy, post-seal escalation — are defended **by architecture, not added validation**: exact-string tool matching (a contract declaring `["*"]` grants only a tool literally named `*`), fail-closed precedence (forbidden evaluated before allowed), and SHA-256 sealing (post-seal modification produces an immediate hash mismatch).
 
-The Judge required no patching to resist synonym substitution, Unicode homoglyphs, zero-width spacing, and dilution attacks — a representation keyed on semantic signals rather than surface n-grams proved more robust to lexical obfuscation than expected.
+The Judge required no patching to resist synonym substitution, Unicode homoglyphs, zero-width spacing, and dilution attacks. Each of these is a fixed, hand-written input tried once; none adapts to the Judge's confidence score, so 4/4 measures these specific inputs, not robustness to an adaptive attacker.
+
+**What 18/18 does not cover.** Every vector uses the system's own interfaces. None models an attacker who can change code running inside the agent's process. That is how the gap below was missed by the suite and found by reading the code.
+
+---
+
+## Known gap: the proof and the decision are separate computations
+
+Tracing one tool call through `AgentIntegritySession.call_tool()` in `integrations/llm_middleware.py`:
+
+1. The Judge's PyTorch model computes a decision from the call's 11 features, and the gate acts on it.
+2. Separately, EZKL generates a proof from the compiled circuit, using the same 11 features.
+3. The gate checks only that the proof verifies (true/false).
+4. **Nothing compares the circuit's output with the decision the gate acted on.**
+
+A valid proof therefore shows *this circuit, on this input, produced this output* — not that the system used that output. If an attacker with code execution patched the PyTorch `predict()` to always return "safe", we expect the tool would run and the proof would still verify. **This was found by reading the code path; the patch has not yet been run.**
+
+Planned fix: take the decision from the proof's public output instead of from the PyTorch model, and move the Judge, prover and verifier into a separate process that holds tool access, so the computation that authorises an action is the one that is proven.
 
 ---
 
@@ -179,14 +200,14 @@ niyam-ai/
 │   ├── control_flow.py           # session-bound sequence enforcement
 │   └── execution_ledger.py       # append-only, hash-chained audit log
 ├── integrations/
-│   ├── llm_middleware.py         # 5-layer enforcement, proof-gated execution
-│
+│   └── llm_middleware.py         # 5-layer enforcement, proof-gated execution
 ├── policy/
 │   ├── guardrails.yaml
 │   └── policy_loader.py
 ├── ezkl_pipeline/
 │   ├── train_pytorch_judge.py    # trains THE Judge on Agent-SafetyBench
-│   └── run_ezkl_pipeline.py      # settings → compile → setup → prove → verify
+│   ├── run_ezkl_pipeline.py      # settings → compile → setup → prove → verify
+│   └── artifacts/                # weights, circuit, keys, proofs, ezkl_real_results.json
 ├── evaluation/
 │   ├── cross_validated_eval.py   # canonical source of truth
 │   ├── external_baseline_eval.py
@@ -231,7 +252,7 @@ session.register_tool("proceed_transaction", my_payment_function)
 
 result = session.call_tool("proceed_transaction", amount=200, recipient="Alice")
 # Raises IntentViolation at whichever layer blocks; e.layer names it.
-# On success, a verified proof is written to ezkl_pipeline/session_proofs/.
+# On success, a verified proof is written to ezkl_pipeline/artifacts/session_proofs/.
 ```
 
 Framework-agnostic — no LangChain, no specific LLM, no API keys required.
@@ -262,28 +283,29 @@ python evaluation/adversarial_redteam.py
 python evaluation/build_table_iv.py
 ```
 
-Results are written to `results/`. Step 2 takes about 20 seconds; step 3 about two minutes.
+Results are written to `results/`. Classification results are deterministic and reproduce exactly; timing results depend on the machine and its load.
 
 ### Verify a proof yourself
 
-Proof verification needs only the verification key, the circuit settings, and the proof — no model weights, no trust in the machine that produced it:
+Proof verification needs only the verification key, the circuit settings, and the proof — no model weights:
 
 ```python
 import ezkl
 ok = ezkl.verify(
-    "ezkl_pipeline/session_proofs/proof_<id>.json",
-    "ezkl_pipeline/settings.json",
-    "ezkl_pipeline/vk.key",
-    srs_path="ezkl_pipeline/kzg.srs",
+    "ezkl_pipeline/artifacts/session_proofs/proof_<id>.json",
+    "ezkl_pipeline/artifacts/settings.json",
+    "ezkl_pipeline/artifacts/vk.key",
+    srs_path="ezkl_pipeline/artifacts/kzg.srs",
 )
 ```
+
 ## Design notes
 
-**The Judge operates on 11 hand-crafted features, not raw text.** This is a deliberate constraint. It bounds the circuit to 431 rows and keeps proof generation at ~2 s, at the cost of discarding signal a higher-dimensional representation would retain. A 3,000-feature TF-IDF classifier scores comparably but does not compile to a practical circuit — and a safety decision that cannot be proved is outside this system's threat model regardless of its accuracy.
+**The Judge operates on 11 hand-crafted features, not raw text.** This is a deliberate constraint. It bounds the circuit to 431 rows and keeps proof generation at ~1.7 s (mean of 30 runs), at the cost of discarding signal a higher-dimensional representation would retain. A 3,011-feature classifier (3,000 TF-IDF features + the same 11 hand features, logistic regression) scored F1 90.9% on an earlier 80/20 held-out split, against 88.8% for the 11-feature network under 5-fold CV. The protocols differ, so this is not a like-for-like comparison — but the wide model does not compile to a practical circuit, and a safety decision that cannot be proved is outside this system's threat model regardless of its accuracy.
 
-**One model, three roles.** `train_pytorch_judge.py` produces the weights that `llm_middleware.py` loads at runtime and that `run_ezkl_pipeline.py` compiles into the circuit. `cross_validated_eval.py` imports the same `JudgeFFN` class, so the architecture evaluated is the architecture deployed and proved. They cannot drift apart.
+**One model, three roles.** `train_pytorch_judge.py` produces the weights that `llm_middleware.py` loads at runtime and that `run_ezkl_pipeline.py` compiles into the circuit. `cross_validated_eval.py` imports the same `JudgeFFN` class, so the architecture evaluated is the architecture deployed and proved. At runtime the PyTorch weights and the compiled circuit are still two separate copies of that model — see [Known gap](#known-gap-the-proof-and-the-decision-are-separate-computations).
 
-**Deployment uses one model; cross-validation estimates its generalization.** The five fold-models exist only to produce leakage-free out-of-fold predictions. The deployed model is trained on the full dataset.
+**Deployment uses one model; cross-validation estimates its generalization.** The five fold-models exist only to produce leakage-free out-of-fold predictions (the 166/189 above). The deployed and proved model is trained on the full dataset with the same architecture, features and training code.
 
 **Every evaluation script shares one fold split.** `cross_validated_eval.get_oof_predictions()` is imported by the ablation, bootstrap, and McNemar scripts — one split, reused everywhere, so numbers cannot silently diverge across tables.
 
@@ -291,18 +313,20 @@ ok = ezkl.verify(
 
 ## Security fixes from red-teaming
 
-**Schema validation** (`schema/tool_gate.py`) — the numeric check accepted IEEE-754 NaN/Infinity, which pass a standard JSON-schema `"number"` check silently, and had no string length bound. Fixed with explicit non-finite rejection plus length and control-character constraints. Deliberately a control-character blacklist rather than an alphanumeric whitelist, so legitimate values like `O'Brien Supplies` are not rejected.
+**Control-flow session binding** (`schema/control_flow.py`, commit `d3a5cc0`) — the sequence guard had no tie to the sealed IntentHash, so a freshly instantiated flow object for the same session reset sequence state and let a completed payment run again. Fixed by binding each instance to its session's IntentHash through a registry that rejects a second instantiation for an active session.
 
-**Control-flow session binding** (`schema/control_flow.py`) — the sequence guard had no cryptographic tie to the sealed IntentHash, so a freshly instantiated flow object could reset sequence state. Fixed by binding each instance to its session's IntentHash through a registry that rejects a second instantiation for an active session.
+**Schema validation** (`schema/tool_gate.py`, commit `3007441`) — the numeric check accepted IEEE-754 NaN/Infinity, which pass a standard JSON-schema `"number"` check silently, and had no string length bound. Fixed with explicit non-finite rejection plus length and control-character constraints. Deliberately a control-character blacklist rather than an alphanumeric whitelist, so legitimate values like `O'Brien Supplies` are not rejected.
 
-Both were found and fixed in this research prototype prior to any production use. Run `evaluation/adversarial_redteam.py` to reproduce.
+Both were found and fixed in this research prototype prior to any production use. Run `evaluation/adversarial_redteam.py` to reproduce the post-fix result.
 
 ---
 
 ## Limitations
 
 - **Scope is action integrity, not content moderation.** Niyam-AI verifies tool calls. It cannot catch harm expressed purely in generated text with no associated tool call (see the 92.0% category above).
-- **The proof certifies computational integrity, not correctness.** A Judge that misclassifies produces a valid proof of a wrong answer. What verification eliminates is a host silently skipping enforcement.
+- **The proof certifies computational integrity, not correctness.** A Judge that misclassifies produces a valid proof of a wrong answer (23 unsafe calls are permitted above).
+- **The proof is not yet bound to the executed decision.** The gate acts on the PyTorch output and only checks that the proof verifies, and all components run in the agent's own process. A compromised host can therefore still skip or override enforcement. See [Known gap](#known-gap-the-proof-and-the-decision-are-separate-computations).
+- **Red-team coverage.** The 18 vectors are fixed inputs through the system's own interfaces; adaptive attacks against the Judge and in-process attackers are untested.
 - **Domain adaptation.** Reported accuracy reflects a Judge fitted to Agent-SafetyBench's distribution. Generalization to different tool vocabularies is untested.
 - **Binary verdict.** Production deployments will want graded risk categories.
 - **Single-agent only.** Multi-agent handoff — shared or delegated IntentHash semantics — is unaddressed.
