@@ -30,7 +30,7 @@ flowchart TB
     end
 
     subgraph Verification["Verification Layer"]
-        Prove["EZKL Prover<br/>Groth16"]
+        Prove["EZKL Prover<br/>Halo2-KZG"]
         Verify["Verifier<br/>checks proof, not weights"]
         Ledger["Execution Ledger<br/>append-only, hash-chained"]
     end
