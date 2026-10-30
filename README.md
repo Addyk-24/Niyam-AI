@@ -129,7 +129,7 @@ Adding the ZK layer changes **no** classification outcome. The proof certifies t
 | One-time: SRS generation | 2,174.5 ms |
 | One-time: key setup | 1,354.7 ms |
 
-All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default), not Groth16. Mean, median and percentiles are computed from the 30 raw proof times stored in `ezkl_pipeline/artifacts/ezkl_real_results.json`. Timings are load-sensitive — CPU-bound proving on a laptop slows as the CPU throttles — so read them as order-of-magnitude feasibility, not a precise benchmark. The constraint count is fixed by the circuit; proof size varies slightly between runs (± 0.04 KB).
+All 30 proofs verified. Backend is **Halo2 with KZG commitments** (EZKL's default). Mean, median and percentiles are computed from the 30 raw proof times stored in `ezkl_pipeline/artifacts/ezkl_real_results.json`. Timings are load-sensitive — CPU-bound proving on a laptop slows as the CPU throttles — so read them as order-of-magnitude feasibility, not a precise benchmark. The constraint count is fixed by the circuit; proof size varies slightly between runs (± 0.04 KB).
 
 The SRS is generated locally via `gen_srs`, which EZKL designates for testing. Production deployment would use an audited universal setup.
 
